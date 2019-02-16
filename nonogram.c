@@ -16,6 +16,7 @@
 typedef struct {
 	int len;
 	int color;
+	int pos_min;
 }
 set_t;
 
@@ -60,6 +61,7 @@ void set_row_changes(clue_t *, int);
 int try_row_set(clue_t *, int, int, int, step_t);
 void change_cell(cell_t *, int, int, int, int);
 void set_cell(cell_t *, int, int);
+int color_in_clue(clue_t *, int, int);
 void print_grid(void);
 void free_clues(int);
 void free_clue(clue_t *);
@@ -206,7 +208,6 @@ int read_clue(clue_t *clue, int pos, int separator) {
 			clue->sets[clue->sets_n].len = set;
 			clue->sets[clue->sets_n].color = c;
 			clue->sets_n++;
-			clue->len_min += set;
 		}
 		c = getchar();
 		if (c != SEPARATOR_SETS && c != DELIMITER_CLUE) {
@@ -219,38 +220,41 @@ int read_clue(clue_t *clue, int pos, int separator) {
 		}
 	}
 	while (c != DELIMITER_CLUE);
-	if (clue->sets_n > 0) {
+	if (clue->sets_n == 0) {
+		clue->len_min = 0;
+	}
+	else {
 		int i;
+		clue->sets[0].pos_min = 0;
+		clue->len_min = clue->sets[0].len;
 		for (i = 1; i < clue->sets_n; i++) {
 			if (clue->sets[i].color == clue->sets[i-1].color) {
 				clue->len_min++;
 			}
-		}
-		if (clue->pos < columns_n) {
-			if (clue->len_min > rows_n) {
-				fprintf(stderr, "Incompatible clue\n");
-				fflush(stderr);
-				free(clue->sets);
-				return 0;
-			}
-			clue->relaxation = rows_n-clue->len_min;
-			clue->unknown = rows_n;
-		}
-		else {
-			if (clue->len_min > columns_n) {
-				fprintf(stderr, "Incompatible clue\n");
-				fflush(stderr);
-				free(clue->sets);
-				return 0;
-			}
-			clue->relaxation = columns_n-clue->len_min;
-			clue->unknown = columns_n;
+			clue->sets[i].pos_min = clue->len_min;
+			clue->len_min += clue->sets[i].len;
 		}
 	}
 	if (clue->pos < columns_n) {
+		if (clue->len_min > rows_n) {
+			fprintf(stderr, "Incompatible clue\n");
+			fflush(stderr);
+			free(clue->sets);
+			return 0;
+		}
+		clue->relaxation = rows_n-clue->len_min;
+		clue->unknown = rows_n;
 		clue->cache_size = (clue->sets_n+1)*(rows_n+1);
 	}
 	else {
+		if (clue->len_min > columns_n) {
+			fprintf(stderr, "Incompatible clue\n");
+			fflush(stderr);
+			free(clue->sets);
+			return 0;
+		}
+		clue->relaxation = columns_n-clue->len_min;
+		clue->unknown = columns_n;
 		clue->cache_size = (clue->sets_n+1)*(columns_n+1);
 	}
 	clue->cache = malloc(sizeof(int)*(size_t)clue->cache_size);
@@ -481,7 +485,7 @@ void set_column_changes(clue_t *clue, int pos) {
 
 int try_column_set(clue_t *clue, int set_idx, int len_min, int pos, step_t step) {
 	int r, i;
-	for (i = pos; i < clue->sets[set_idx].len+pos && (cells[i*(columns_n+1)+clue->pos].color == COLOR_UNKNOWN || cells[i*(columns_n+1)+clue->pos].color == clue->sets[set_idx].color); i++) {
+	for (i = pos; i < clue->sets[set_idx].len+pos && (cells[i*(columns_n+1)+clue->pos].color == COLOR_UNKNOWN || cells[i*(columns_n+1)+clue->pos].color == clue->sets[set_idx].color) && color_in_clue(clues+i+columns_n, clue->pos, clue->sets[set_idx].color); i++) {
 		change_cell(cells+i*(columns_n+1)+clue->pos, COLOR_UNKNOWN, clues_n, clue->sets[set_idx].color, clue->pos);
 	}
 	if (i == clue->sets[set_idx].len+pos) {
@@ -599,7 +603,7 @@ void set_row_changes(clue_t *clue, int pos) {
 
 int try_row_set(clue_t *clue, int set_idx, int len_min, int pos, step_t step) {
 	int r, i;
-	for (i = pos; i < clue->sets[set_idx].len+pos && (cells[(clue->pos-columns_n)*(columns_n+1)+i].color == COLOR_UNKNOWN || cells[(clue->pos-columns_n)*(columns_n+1)+i].color == clue->sets[set_idx].color); i++) {
+	for (i = pos; i < clue->sets[set_idx].len+pos && (cells[(clue->pos-columns_n)*(columns_n+1)+i].color == COLOR_UNKNOWN || cells[(clue->pos-columns_n)*(columns_n+1)+i].color == clue->sets[set_idx].color) && color_in_clue(clues+i, clue->pos-columns_n, clue->sets[set_idx].color); i++) {
 		change_cell(cells+(clue->pos-columns_n)*(columns_n+1)+i, COLOR_UNKNOWN, clues_n, clue->sets[set_idx].color, clue->pos);
 	}
 	if (i == clue->sets[set_idx].len+pos) {
@@ -628,6 +632,16 @@ void change_cell(cell_t *cell, int from_color, int from_clue_pos, int to_color, 
 void set_cell(cell_t *cell, int color, int clue_pos) {
 	cell->color = color;
 	cell->clue_pos = clue_pos;
+}
+
+int color_in_clue(clue_t *clue, int pos, int color) {
+	int i;
+	for (i = 0; i < clue->sets_n && clue->sets[i].pos_min <= pos; i++) {
+		if (clue->sets[i].pos_min+clue->sets[i].len+clue->relaxation > pos && clue->sets[i].color == color) {
+			return 1;
+		}
+	}
+	return 0;
 }
 
 void print_grid(void) {

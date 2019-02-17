@@ -42,7 +42,7 @@ typedef struct {
 cell_t;
 
 typedef enum {
-	STEP_PHASE1_RUN,
+	STEP_PHASE1,
 	STEP_PHASE2_EVAL,
 	STEP_PHASE2_RUN
 }
@@ -53,14 +53,15 @@ void link_clue(clue_t *, clue_t *, clue_t *);
 int nonogram_phase1(void);
 void nonogram_phase2(void);
 void clear_cache(clue_t *);
-int choose_column(clue_t *, int, int, int, step_t);
-void set_column_changes(clue_t *, int);
-int try_column_set(clue_t *, int, int, int, step_t);
-int choose_row(clue_t *, int, int, int, step_t);
-void set_row_changes(clue_t *, int);
-int try_row_set(clue_t *, int, int, int, step_t);
+int choose_column(clue_t *, int, int, int, step_t, int *);
+void set_column_changes(clue_t *, int, int *);
+int try_column_set(clue_t *, int, int, int, step_t, int *);
+int choose_row(clue_t *, int, int, int, step_t, int *);
+void set_row_changes(clue_t *, int, int *);
+int try_row_set(clue_t *, int, int, int, step_t, int *);
 void change_cell(cell_t *, int, int, int, int);
 void set_cell(cell_t *, int, int);
+int sum_with_check(int, int);
 int color_in_clue(clue_t *, int, int);
 void print_grid(void);
 void free_clues(int);
@@ -239,7 +240,9 @@ int read_clue(clue_t *clue, int pos, int separator) {
 		if (clue->len_min > rows_n) {
 			fprintf(stderr, "Incompatible clue\n");
 			fflush(stderr);
-			free(clue->sets);
+			if (clue->sets_n > 0) {
+				free(clue->sets);
+			}
 			return 0;
 		}
 		clue->relaxation = rows_n-clue->len_min;
@@ -250,7 +253,9 @@ int read_clue(clue_t *clue, int pos, int separator) {
 		if (clue->len_min > columns_n) {
 			fprintf(stderr, "Incompatible clue\n");
 			fflush(stderr);
-			free(clue->sets);
+			if (clue->sets_n > 0) {
+				free(clue->sets);
+			}
 			return 0;
 		}
 		clue->relaxation = columns_n-clue->len_min;
@@ -281,7 +286,7 @@ void link_clue(clue_t *clue, clue_t *last, clue_t *next) {
 }
 
 int nonogram_phase1(void) {
-	int changes_n, i;
+	int changes_n, step1_first = 0, i;
 	clue_t *clue_min, *clue;
 	if (header->next == header) {
 		return 0;
@@ -307,7 +312,7 @@ int nonogram_phase1(void) {
 		for (i = 0; i < rows_n; i++) {
 			cells[i*(columns_n+1)+columns_n] = cells[i*(columns_n+1)+clue_min->pos];
 		}
-		choose_column(clue_min, 0, clue_min->len_min, 0, STEP_PHASE1_RUN);
+		choose_column(clue_min, 0, clue_min->len_min, 0, STEP_PHASE1, &step1_first);
 		for (i = 0; i < rows_n; i++) {
 			if (cells[i*(columns_n+1)+columns_n].color != COLOR_SEVERAL && cells[i*(columns_n+1)+columns_n].clue_pos < clues_n) {
 				set_cell(cells+i*(columns_n+1)+clue_min->pos, cells[i*(columns_n+1)+columns_n].color, clues_n);
@@ -321,7 +326,7 @@ int nonogram_phase1(void) {
 		for (i = 0; i < columns_n; i++) {
 			cells[rows_n*(columns_n+1)+i] = cells[(clue_min->pos-columns_n)*(columns_n+1)+i];
 		}
-		choose_row(clue_min, 0, clue_min->len_min, 0, STEP_PHASE1_RUN);
+		choose_row(clue_min, 0, clue_min->len_min, 0, STEP_PHASE1, &step1_first);
 		for (i = 0; i < columns_n; i++) {
 			if (cells[rows_n*(columns_n+1)+i].color != COLOR_SEVERAL && cells[rows_n*(columns_n+1)+i].clue_pos < clues_n) {
 				set_cell(cells+(clue_min->pos-columns_n)*(columns_n+1)+i, cells[rows_n*(columns_n+1)+i].color, clues_n);
@@ -340,6 +345,7 @@ int nonogram_phase1(void) {
 }
 
 void nonogram_phase2(void) {
+	int step1_first;
 	clue_t *clue_min, *clue;
 	nodes_n++;
 	if (header->next == header) {
@@ -349,16 +355,17 @@ void nonogram_phase2(void) {
 		}
 		return;
 	}
+	step1_first = 0;
 	clue_min = header;
 	options_min = INT_MAX;
 	for (clue = header->next; clue != header; clue = clue->next) {
 		int options_n;
 		clear_cache(clue);
 		if (clue->pos < columns_n) {
-			options_n = choose_column(clue, 0, clue->len_min, 0, STEP_PHASE2_EVAL);
+			options_n = choose_column(clue, 0, clue->len_min, 0, STEP_PHASE2_EVAL, &step1_first);
 		}
 		else {
-			options_n = choose_row(clue, 0, clue->len_min, 0, STEP_PHASE2_EVAL);
+			options_n = choose_row(clue, 0, clue->len_min, 0, STEP_PHASE2_EVAL, &step1_first);
 		}
 		if (options_n < options_min) {
 			clue_min = clue;
@@ -371,10 +378,10 @@ void nonogram_phase2(void) {
 	clue_min->last->next = clue_min->next;
 	clue_min->next->last = clue_min->last;
 	if (clue_min->pos < columns_n) {
-		choose_column(clue_min, 0, clue_min->len_min, 0, STEP_PHASE2_RUN);
+		choose_column(clue_min, 0, clue_min->len_min, 0, STEP_PHASE2_RUN, &step1_first);
 	}
 	else {
-		choose_row(clue_min, 0, clue_min->len_min, 0, STEP_PHASE2_RUN);
+		choose_row(clue_min, 0, clue_min->len_min, 0, STEP_PHASE2_RUN, &step1_first);
 	}
 	clue_min->next->last = clue_min;
 	clue_min->last->next = clue_min;
@@ -387,24 +394,18 @@ void clear_cache(clue_t *clue) {
 	}
 }
 
-int choose_column(clue_t *clue, int set_idx, int len_min, int pos, step_t step) {
+int choose_column(clue_t *clue, int set_idx, int len_min, int pos, step_t step, int *step1_first) {
 	int cache_key = pos*(clue->sets_n+1)+set_idx, r, i;
-	if (step == STEP_PHASE2_EVAL) {
+	if (step == STEP_PHASE1) {
 		if (clue->cache[cache_key] >= 0) {
+			if (clue->cache[cache_key] > 0) {
+				set_column_changes(clue, pos, step1_first);
+			}
 			return clue->cache[cache_key];
 		}
 	}
-	else if (step == STEP_PHASE1_RUN) {
-		for (i = 0; i < rows_n && cells[i*(columns_n+1)+clue->pos].color == COLOR_WHITE && cells[i*(columns_n+1)+columns_n].color == COLOR_WHITE; i++);
-		for (; i < rows_n && cells[i*(columns_n+1)+columns_n].color != COLOR_UNKNOWN && cells[i*(columns_n+1)+columns_n].clue_pos == clues_n; i++);
-		if (i == rows_n) {
-			clue->cache[cache_key] = 0;
-			return 0;
-		}
+	else if (step == STEP_PHASE2_EVAL) {
 		if (clue->cache[cache_key] >= 0) {
-			if (clue->cache[cache_key] > 0) {
-				set_column_changes(clue, pos);
-			}
 			return clue->cache[cache_key];
 		}
 	}
@@ -418,8 +419,8 @@ int choose_column(clue_t *clue, int set_idx, int len_min, int pos, step_t step) 
 			change_cell(cells+i*(columns_n+1)+clue->pos, COLOR_UNKNOWN, clues_n, COLOR_WHITE, clue->pos);
 		}
 		if (i == rows_n) {
-			if (step == STEP_PHASE1_RUN) {
-				set_column_changes(clue, rows_n);
+			if (step == STEP_PHASE1) {
+				set_column_changes(clue, rows_n, step1_first);
 			}
 			else if (step == STEP_PHASE2_RUN) {
 				nonogram_phase2();
@@ -439,10 +440,10 @@ int choose_column(clue_t *clue, int set_idx, int len_min, int pos, step_t step) 
 	}
 	r = 0;
 	if (set_idx == 0 || clue->sets[set_idx].color != clue->sets[set_idx-1].color) {
-		r += try_column_set(clue, set_idx, len_min, pos, step);
-		for (i = pos; i < rows_n-len_min && (cells[i*(columns_n+1)+clue->pos].color == COLOR_WHITE || cells[i*(columns_n+1)+clue->pos].color == COLOR_UNKNOWN) && (step != STEP_PHASE2_EVAL || r < options_min); i++) {
+		r = sum_with_check(r, try_column_set(clue, set_idx, len_min, pos, step, step1_first));
+		for (i = pos; i < rows_n-len_min && (cells[i*(columns_n+1)+clue->pos].color == COLOR_WHITE || cells[i*(columns_n+1)+clue->pos].color == COLOR_UNKNOWN) && *step1_first < rows_n && (step != STEP_PHASE2_EVAL || r < options_min); i++) {
 			change_cell(cells+i*(columns_n+1)+clue->pos, COLOR_UNKNOWN, clues_n, COLOR_WHITE, clue->pos);
-			r += try_column_set(clue, set_idx, len_min, i+1, step);
+			r = sum_with_check(r, try_column_set(clue, set_idx, len_min, i+1, step, step1_first));
 		}
 		for (i--; i >= pos; i--) {
 			change_cell(cells+i*(columns_n+1)+clue->pos, COLOR_WHITE, clue->pos, COLOR_UNKNOWN, clues_n);
@@ -451,10 +452,10 @@ int choose_column(clue_t *clue, int set_idx, int len_min, int pos, step_t step) 
 	else {
 		if (cells[pos*(columns_n+1)+clue->pos].color == COLOR_WHITE || cells[pos*(columns_n+1)+clue->pos].color == COLOR_UNKNOWN) {
 			change_cell(cells+pos*(columns_n+1)+clue->pos, COLOR_UNKNOWN, clues_n, COLOR_WHITE, clue->pos);
-			r += try_column_set(clue, set_idx, len_min, pos+1, step);
-			for (i = pos+1; i <= rows_n-len_min && (cells[i*(columns_n+1)+clue->pos].color == COLOR_WHITE || cells[i*(columns_n+1)+clue->pos].color == COLOR_UNKNOWN) && (step != STEP_PHASE2_EVAL || r < options_min); i++) {
+			r = sum_with_check(r, try_column_set(clue, set_idx, len_min, pos+1, step, step1_first));
+			for (i = pos+1; i <= rows_n-len_min && (cells[i*(columns_n+1)+clue->pos].color == COLOR_WHITE || cells[i*(columns_n+1)+clue->pos].color == COLOR_UNKNOWN) && *step1_first < rows_n && (step != STEP_PHASE2_EVAL || r < options_min); i++) {
 				change_cell(cells+i*(columns_n+1)+clue->pos, COLOR_UNKNOWN, clues_n, COLOR_WHITE, clue->pos);
-				r += try_column_set(clue, set_idx, len_min, i+1, step);
+				r = sum_with_check(r, try_column_set(clue, set_idx, len_min, i+1, step, step1_first));
 			}
 			for (i--; i >= pos; i--) {
 				change_cell(cells+i*(columns_n+1)+clue->pos, COLOR_WHITE, clue->pos, COLOR_UNKNOWN, clues_n);
@@ -467,9 +468,9 @@ int choose_column(clue_t *clue, int set_idx, int len_min, int pos, step_t step) 
 	return r;
 }
 
-void set_column_changes(clue_t *clue, int pos) {
+void set_column_changes(clue_t *clue, int pos, int *step1_first) {
 	int i;
-	for (i = 0; i < pos; i++) {
+	for (i = *step1_first; i < pos; i++) {
 		if (cells[i*(columns_n+1)+clue->pos].clue_pos == clue->pos) {
 			if (cells[i*(columns_n+1)+columns_n].color == COLOR_UNKNOWN) {
 				set_cell(cells+i*(columns_n+1)+columns_n, cells[i*(columns_n+1)+clue->pos].color, clue->pos);
@@ -481,19 +482,20 @@ void set_column_changes(clue_t *clue, int pos) {
 			}
 		}
 	}
+	for (; *step1_first < rows_n && cells[*step1_first*(columns_n+1)+columns_n].color != COLOR_UNKNOWN && cells[*step1_first*(columns_n+1)+columns_n].clue_pos == clues_n; *step1_first += 1);
 }
 
-int try_column_set(clue_t *clue, int set_idx, int len_min, int pos, step_t step) {
+int try_column_set(clue_t *clue, int set_idx, int len_min, int pos, step_t step, int *step1_first) {
 	int r, i;
-	for (i = pos; i < clue->sets[set_idx].len+pos && (cells[i*(columns_n+1)+clue->pos].color == COLOR_UNKNOWN || cells[i*(columns_n+1)+clue->pos].color == clue->sets[set_idx].color) && color_in_clue(clues+i+columns_n, clue->pos, clue->sets[set_idx].color); i++) {
+	for (i = pos; i < clue->sets[set_idx].len+pos && ((cells[i*(columns_n+1)+clue->pos].color == COLOR_UNKNOWN && color_in_clue(clues+i+columns_n, clue->pos, clue->sets[set_idx].color)) || cells[i*(columns_n+1)+clue->pos].color == clue->sets[set_idx].color); i++) {
 		change_cell(cells+i*(columns_n+1)+clue->pos, COLOR_UNKNOWN, clues_n, clue->sets[set_idx].color, clue->pos);
 	}
 	if (i == clue->sets[set_idx].len+pos) {
 		if (set_idx == 0 || clue->sets[set_idx].color != clue->sets[set_idx-1].color) {
-			r = choose_column(clue, set_idx+1, len_min-clue->sets[set_idx].len, i, step);
+			r = choose_column(clue, set_idx+1, len_min-clue->sets[set_idx].len, i, step, step1_first);
 		}
 		else {
-			r = choose_column(clue, set_idx+1, len_min-clue->sets[set_idx].len-1, i, step);
+			r = choose_column(clue, set_idx+1, len_min-clue->sets[set_idx].len-1, i, step, step1_first);
 		}
 	}
 	else {
@@ -505,24 +507,18 @@ int try_column_set(clue_t *clue, int set_idx, int len_min, int pos, step_t step)
 	return r;
 }
 
-int choose_row(clue_t *clue, int set_idx, int len_min, int pos, step_t step) {
+int choose_row(clue_t *clue, int set_idx, int len_min, int pos, step_t step, int *step1_first) {
 	int cache_key = pos*(clue->sets_n+1)+set_idx, r, i;
-	if (step == STEP_PHASE2_EVAL) {
+	if (step == STEP_PHASE1) {
 		if (clue->cache[cache_key] >= 0) {
+			if (clue->cache[cache_key] > 0) {
+				set_row_changes(clue, pos, step1_first);
+			}
 			return clue->cache[cache_key];
 		}
 	}
-	else if (step == STEP_PHASE1_RUN) {
-		for (i = 0; i < columns_n && cells[(clue->pos-columns_n)*(columns_n+1)+i].color == COLOR_WHITE && cells[rows_n*(columns_n+1)+i].color == COLOR_WHITE; i++);
-		for (; i < columns_n && cells[rows_n*(columns_n+1)+i].color != COLOR_UNKNOWN && cells[rows_n*(columns_n+1)+i].clue_pos == clues_n; i++);
-		if (i == columns_n) {
-			clue->cache[cache_key] = 0;
-			return 0;
-		}
+	else if (step == STEP_PHASE2_EVAL) {
 		if (clue->cache[cache_key] >= 0) {
-			if (clue->cache[cache_key] > 0) {
-				set_row_changes(clue, pos);
-			}
 			return clue->cache[cache_key];
 		}
 	}
@@ -536,8 +532,8 @@ int choose_row(clue_t *clue, int set_idx, int len_min, int pos, step_t step) {
 			change_cell(cells+(clue->pos-columns_n)*(columns_n+1)+i, COLOR_UNKNOWN, clues_n, COLOR_WHITE, clue->pos);
 		}
 		if (i == columns_n) {
-			if (step == STEP_PHASE1_RUN) {
-				set_row_changes(clue, columns_n);
+			if (step == STEP_PHASE1) {
+				set_row_changes(clue, columns_n, step1_first);
 			}
 			else if (step == STEP_PHASE2_RUN) {
 				nonogram_phase2();
@@ -557,10 +553,10 @@ int choose_row(clue_t *clue, int set_idx, int len_min, int pos, step_t step) {
 	}
 	r = 0;
 	if (set_idx == 0 || clue->sets[set_idx].color != clue->sets[set_idx-1].color) {
-		r += try_row_set(clue, set_idx, len_min, pos, step);
-		for (i = pos; i < columns_n-len_min && (cells[(clue->pos-columns_n)*(columns_n+1)+i].color == COLOR_WHITE || cells[(clue->pos-columns_n)*(columns_n+1)+i].color == COLOR_UNKNOWN) && (step != STEP_PHASE2_EVAL || r < options_min); i++) {
+		r = sum_with_check(r, try_row_set(clue, set_idx, len_min, pos, step, step1_first));
+		for (i = pos; i < columns_n-len_min && (cells[(clue->pos-columns_n)*(columns_n+1)+i].color == COLOR_WHITE || cells[(clue->pos-columns_n)*(columns_n+1)+i].color == COLOR_UNKNOWN) && *step1_first < columns_n && (step != STEP_PHASE2_EVAL || r < options_min); i++) {
 			change_cell(cells+(clue->pos-columns_n)*(columns_n+1)+i, COLOR_UNKNOWN, clues_n, COLOR_WHITE, clue->pos);
-			r += try_row_set(clue, set_idx, len_min, i+1, step);
+			r = sum_with_check(r, try_row_set(clue, set_idx, len_min, i+1, step, step1_first));
 		}
 		for (i--; i >= pos; i--) {
 			change_cell(cells+(clue->pos-columns_n)*(columns_n+1)+i, COLOR_WHITE, clue->pos, COLOR_UNKNOWN, clues_n);
@@ -569,10 +565,10 @@ int choose_row(clue_t *clue, int set_idx, int len_min, int pos, step_t step) {
 	else {
 		if (cells[(clue->pos-columns_n)*(columns_n+1)+pos].color == COLOR_WHITE || cells[(clue->pos-columns_n)*(columns_n+1)+pos].color == COLOR_UNKNOWN) {
 			change_cell(cells+(clue->pos-columns_n)*(columns_n+1)+pos, COLOR_UNKNOWN, clues_n, COLOR_WHITE, clue->pos);
-			r += try_row_set(clue, set_idx, len_min, pos+1, step);
-			for (i = pos+1; i <= columns_n-len_min && (cells[(clue->pos-columns_n)*(columns_n+1)+i].color == COLOR_WHITE || cells[(clue->pos-columns_n)*(columns_n+1)+i].color == COLOR_UNKNOWN) && (step != STEP_PHASE2_EVAL || r < options_min); i++) {
+			r = sum_with_check(r, try_row_set(clue, set_idx, len_min, pos+1, step, step1_first));
+			for (i = pos+1; i <= columns_n-len_min && (cells[(clue->pos-columns_n)*(columns_n+1)+i].color == COLOR_WHITE || cells[(clue->pos-columns_n)*(columns_n+1)+i].color == COLOR_UNKNOWN) && *step1_first < columns_n && (step != STEP_PHASE2_EVAL || r < options_min); i++) {
 				change_cell(cells+(clue->pos-columns_n)*(columns_n+1)+i, COLOR_UNKNOWN, clues_n, COLOR_WHITE, clue->pos);
-				r += try_row_set(clue, set_idx, len_min, i+1, step);
+				r = sum_with_check(r, try_row_set(clue, set_idx, len_min, i+1, step, step1_first));
 			}
 			for (i--; i >= pos; i--) {
 				change_cell(cells+(clue->pos-columns_n)*(columns_n+1)+i, COLOR_WHITE, clue->pos, COLOR_UNKNOWN, clues_n);
@@ -585,9 +581,9 @@ int choose_row(clue_t *clue, int set_idx, int len_min, int pos, step_t step) {
 	return r;
 }
 
-void set_row_changes(clue_t *clue, int pos) {
+void set_row_changes(clue_t *clue, int pos, int *step1_first) {
 	int i;
-	for (i = 0; i < pos; i++) {
+	for (i = *step1_first; i < pos; i++) {
 		if (cells[(clue->pos-columns_n)*(columns_n+1)+i].clue_pos == clue->pos) {
 			if (cells[rows_n*(columns_n+1)+i].color == COLOR_UNKNOWN) {
 				set_cell(cells+rows_n*(columns_n+1)+i, cells[(clue->pos-columns_n)*(columns_n+1)+i].color, clue->pos);
@@ -599,19 +595,20 @@ void set_row_changes(clue_t *clue, int pos) {
 			}
 		}
 	}
+	for (; *step1_first < columns_n && cells[rows_n*(columns_n+1)+*step1_first].color != COLOR_UNKNOWN && cells[rows_n*(columns_n+1)+*step1_first].clue_pos == clues_n; *step1_first += 1);
 }
 
-int try_row_set(clue_t *clue, int set_idx, int len_min, int pos, step_t step) {
+int try_row_set(clue_t *clue, int set_idx, int len_min, int pos, step_t step, int *step1_first) {
 	int r, i;
-	for (i = pos; i < clue->sets[set_idx].len+pos && (cells[(clue->pos-columns_n)*(columns_n+1)+i].color == COLOR_UNKNOWN || cells[(clue->pos-columns_n)*(columns_n+1)+i].color == clue->sets[set_idx].color) && color_in_clue(clues+i, clue->pos-columns_n, clue->sets[set_idx].color); i++) {
+	for (i = pos; i < clue->sets[set_idx].len+pos && ((cells[(clue->pos-columns_n)*(columns_n+1)+i].color == COLOR_UNKNOWN && color_in_clue(clues+i, clue->pos-columns_n, clue->sets[set_idx].color)) || cells[(clue->pos-columns_n)*(columns_n+1)+i].color == clue->sets[set_idx].color); i++) {
 		change_cell(cells+(clue->pos-columns_n)*(columns_n+1)+i, COLOR_UNKNOWN, clues_n, clue->sets[set_idx].color, clue->pos);
 	}
 	if (i == clue->sets[set_idx].len+pos) {
 		if (set_idx == 0 || clue->sets[set_idx].color != clue->sets[set_idx-1].color) {
-			r = choose_row(clue, set_idx+1, len_min-clue->sets[set_idx].len, i, step);
+			r = choose_row(clue, set_idx+1, len_min-clue->sets[set_idx].len, i, step, step1_first);
 		}
 		else {
-			r = choose_row(clue, set_idx+1, len_min-clue->sets[set_idx].len-1, i, step);
+			r = choose_row(clue, set_idx+1, len_min-clue->sets[set_idx].len-1, i, step, step1_first);
 		}
 	}
 	else {
@@ -632,6 +629,13 @@ void change_cell(cell_t *cell, int from_color, int from_clue_pos, int to_color, 
 void set_cell(cell_t *cell, int color, int clue_pos) {
 	cell->color = color;
 	cell->clue_pos = clue_pos;
+}
+
+int sum_with_check(int a, int b) {
+	if (a <= INT_MAX-b) {
+		return a+b;
+	}
+	return INT_MAX;
 }
 
 int color_in_clue(clue_t *clue, int pos, int color) {

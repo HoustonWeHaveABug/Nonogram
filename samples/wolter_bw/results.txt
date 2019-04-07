@@ -1,0 +1,39 @@
+Sample Set of Black & White Puzzles
+From Jan Wolter's Survey - https://webpbn.com/survey
+
+Environment: Cygwin on Windows 7 Professional
+CPU: Intel i3-4150 3.50 GHz - One core used
+
+puzzle 		size		time
+
+#1: Dancer 	5 x 10		0s05
+#6: Cat 	20 x 20		0s05
+#21: Skid 	14 x 25		0s05
+#27: Bucks 	27 x 23		0s06
+#23: Edge 	10 x 11		0s29
+#2413: Smoke 	20 x 20		0s30
+#16: Knot 	34 x 34		0s07
+#529: Swing 	45 x 45		0s06
+#65: Mum 	34 x 40		2s97
+#7604: DiCap 	52 x 63		0s12
+#1694: Tragic 	45 x 50		3s49
+#1611: Merka 	55 x 60		1s42
+#436: Petro 	40 x 35		3s58
+#4645: M&M 	50 x 70		39s94
+#3541: Signed 	60 x 50		1m30s
+#803: Light 	50 x 45		11s35
+#6574: Forever 	25 x 25		10s43
+#10810: Center 	60 x 60		39s19
+#2040: Hot 	55 x 60		2m52s
+#6739: Karate 	40 x 40		18s77
+#8098: 9-Dom 	19 x 19		2m40s
+#2556: Flag 	65 x 45		1s12
+#2712: Lion 	47 x 47		1m51s
+#10088: Marley 	52 x 63		+
+#18297: Thing 	36 x 42		+
+#9892: Nature 	50 x 40		+
+#12548: Sierp 	47 x 40		6m31s
+#22336: Gettys 	99 x 59		+
+Knotty 		40 x 40		+
+Meow 		75 x 50		+
+Faase 		95 x 80		+

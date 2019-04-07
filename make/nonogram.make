@@ -1,10 +1,10 @@
 NONOGRAM_C_FLAGS=-O2 -Wall -Wextra -Waggregate-return -Wcast-align -Wcast-qual -Wconversion -Wformat=2 -Winline -Wlong-long -Wmissing-prototypes -Wmissing-declarations -Wnested-externs -Wno-import -Wpointer-arith -Wredundant-decls -Wshadow -Wstrict-prototypes -Wwrite-strings
 
-nonogram: nonogram.o
-	gcc -o nonogram nonogram.o
+../bin/nonogram: ../obj/nonogram.o
+	gcc -o ../bin/nonogram ../obj/nonogram.o
 
-nonogram.o: nonogram.c nonogram.make
-	gcc -c ${NONOGRAM_C_FLAGS} -o nonogram.o nonogram.c
+../obj/nonogram.o: ../src/nonogram.c nonogram.make
+	gcc -c ${NONOGRAM_C_FLAGS} -o ../obj/nonogram.o ../src/nonogram.c
 
 clean:
-	rm -f nonogram nonogram.o
+	rm -f ../bin/nonogram ../obj/nonogram.o

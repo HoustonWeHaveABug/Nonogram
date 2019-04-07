@@ -1,0 +1,16 @@
+5,000 Randomly Generated 30x30 Puzzles
+From Jan Wolter's Survey - https://webpbn.com/survey
+
+Environment: Cygwin on Windows 7 Professional
+CPU: Intel i3-4150 3.50 GHz - One core used
+
+0 to 0.09 sec		87
+0.10 to 0.19 sec	158
+0.20 to 0.49 sec	68
+0.50 to 0.99 sec	77
+1.00 to 3.99 sec	866
+4.00 to 9.99 sec	1698
+10.00 to 29.99 sec	1272
+30.00 to 59.99 sec	416
+1 min to 2 min		180
+2 min or more		178

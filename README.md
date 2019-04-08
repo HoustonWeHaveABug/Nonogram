@@ -9,10 +9,12 @@ It is a backtracker that runs in two phases at each node of the search tree:
 Phase 1 - For each clue that have still unknown cells, the program generates all combinations, and then locks all cells that have the same value in all the combinations generated. This phase is iterated until no change can be made in the grid, or no combination is generated for one clue, which is a contradiction and makes the program backtracks.
 
 Phase 2 - If all cells are locked it means a solution was found and it is immediately printed along with the current running time in seconds and size of the search tree (the number of nodes). Otherwise the program selects the "considered as optimal" set using the following criteria in order by running Phase 1 at the next depth for each set:
-    - Lowest number of possible placements
-    - Greatest number of placements that leads to a solution
-    - Greatest number of locked cells for all placements
- Then the search continues at the next depth for each possible placement of the selected set.
+
+- Lowest number of possible placements
+- Greatest number of placements that lead to a solution
+- Greatest number of locked cells for all placements
+    
+Then the search continues at the next depth for each placement of the selected set.
  
 At the end of execution the program will print the running time in seconds, the size of the search tree (the number of nodes) and the number of solutions found.
 

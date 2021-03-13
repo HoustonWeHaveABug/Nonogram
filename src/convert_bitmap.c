@@ -3,7 +3,8 @@
 
 int main(int argc, char *argv[]) {
 	char *end;
-	int width, height, *cells, len, i, j;
+	int *cells, len, i, j;
+	long width, height;
 	if (argc != 3) {
 		fprintf(stderr, "Usage: %s width height\n", argv[0]);
 		fflush(stderr);
@@ -44,7 +45,7 @@ int main(int argc, char *argv[]) {
 			return EXIT_FAILURE;
 		}
 	}
-	printf("%d\n%d\n0\n", width, height);
+	printf("%ld\n%ld\n0\n", width, height);
 	for (i = 0; i < width; i++) {
 		putchar('\"');
 		len = 0;

@@ -2,7 +2,10 @@
 
 Nonogram solver written in C, solution to challenge https://www.reddit.com/r/dailyprogrammer/comments/am1x6o/20190201_challenge_374_hard_nonogram_solver/.
 
-The program takes as optional argument the maximum number of solutions it will search for. The default value is the LONG_MAX C constant.
+The program expects the following arguments on the command line:
+
+- Verbose mode flag (0: Off, 1: On)
+- Maximum number of solutions it will search for. This argument is optional and the default value is the LONG_MAX C constant.
 
 It is a backtracker that runs in two phases at each node of the search tree:
 
@@ -14,9 +17,9 @@ Phase 2 - If all cells are locked it means a solution was found and it is immedi
 - Greatest number of placements that lead to a solution
 - Greatest number of locked cells for all placements
     
-Then the search continues at the next depth for each placement of the selected set.
+Phase 2 is iterated as long as at least one placement fails. Then the search continues at the next depth for each placement of the selected set.
  
-At the end of execution the program will print the running time in seconds, the size of the search tree (the number of nodes) and the number of solutions found.
+At the end of execution the program will print the running time in seconds, some statistics about the search tree (total number of nodes, number of run nodes, number of failures) and the number of solutions found.
 
 The number of combinations generated at every possible position and set index is cached for each clue to avoid the same search happening more than once.
 
@@ -33,3 +36,5 @@ The structure of the puzzle data is the following:
 - Row clues (same structure as for the column clues)
 
 If the puzzle is colored, the color is represented by an alphanumeric symbol and specified after each set (it means that the program can manage up to 62 colors). The separator between the set and the color is a dash.
+
+If one column/row is empty, the clues shall be specified as "0".

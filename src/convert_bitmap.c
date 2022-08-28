@@ -1,9 +1,13 @@
 #include <stdio.h>
 #include <stdlib.h>
 
+void convert_section(long, long, long, long);
+
+int *cells;
+
 int main(int argc, char *argv[]) {
 	char *end;
-	int *cells, len, i, j;
+	int i, j;
 	long width, height;
 	if (argc != 3) {
 		fprintf(stderr, "Usage: %s width height\n", argv[0]);
@@ -29,7 +33,7 @@ int main(int argc, char *argv[]) {
 		return EXIT_FAILURE;
 	}
 	for (i = 0; i < height; i++) {
-		for (j = 0; j < height; j++) {
+		for (j = 0; j < width; j++) {
 			cells[i*width+j] = getchar();
 			if (cells[i*width+j] != '0' && cells[i*width+j] != '1') {
 				fprintf(stderr, "Invalid cell (row %d column %d)\n", i, j);
@@ -46,52 +50,48 @@ int main(int argc, char *argv[]) {
 		}
 	}
 	printf("%ld\n%ld\n0\n", width, height);
-	for (i = 0; i < width; i++) {
-		putchar('\"');
-		len = 0;
-		for (j = 0; j < height; j++) {
-			if (cells[j*width+i] == '0') {
-				if (len > 0) {
-					printf("%d,", len);
-					len = 0;
-				}
-			}
-			else {
-				len++;
-				if (j == height-1) {
-					printf("%d,", len);
-				}
-			}
-		}
-		printf("0\"");
-		if (i < width-1) {
-			putchar(',');
-		}
-	}
-	puts("");
-	for (i = 0; i < height; i++) {
-		putchar('\"');
-		len = 0;
-		for (j = 0; j < width; j++) {
-			if (cells[i*width+j] == '0') {
-				if (len > 0) {
-					printf("%d,", len);
-					len = 0;
-				}
-			}
-			else {
-				len++;
-				if (j == width-1) {
-					printf("%d,", len);
-				}
-			}
-		}
-		printf("0\"");
-		if (i < height-1) {
-			putchar(',');
-		}
-	}
-	puts("");
+	convert_section(width, height, 1L, width);
+	convert_section(height, width, width, 1L);
 	free(cells);
 	return EXIT_SUCCESS;
+}
+
+void convert_section(long size_i, long size_j, long weight_i, long weight_j) {
+	int sets_n, len, i, j;
+	for (i = 0; i < size_i; i++) {
+		putchar('\"');
+		sets_n = 0;
+		len = 0;
+		for (j = 0; j < size_j; j++) {
+			if (cells[i*weight_i+j*weight_j] == '0') {
+				if (len > 0) {
+					if (sets_n > 0) {
+						putchar(',');
+					}
+					printf("%d", len);
+					sets_n++;
+					len = 0;
+				}
+			}
+			else {
+				len++;
+			}
+		}
+		if (len > 0) {
+			if (sets_n > 0) {
+				putchar(',');
+			}
+			printf("%d", len);
+		}
+		else {
+			if (sets_n == 0) {
+				printf("%d", len);
+			}
+		}
+		putchar('\"');
+		if (i < size_i-1) {
+			putchar(',');
+		}
+	}
+	puts("");
 }

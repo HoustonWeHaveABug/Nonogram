@@ -947,7 +947,7 @@ int sweep_clue_empty_then_set(int depth, clue_t *clue, set_t *set, int pos, cell
 }
 
 int sweep_clue_set(int depth, clue_t *clue, set_t *set, int pos, cell_t *start, int offset, int *len, int *colored_cells_n) {
-	int r, i;
+	int i;
 	cell_t *cell;
 	*colored_cells_n = 0;
 	for (i = pos, cell = start; i < set->len+pos && match_color_and_crossed_clue(depth, clue, i, set->color_pos, cell); i++, cell += offset) {
@@ -957,17 +957,15 @@ int sweep_clue_set(int depth, clue_t *clue, set_t *set, int pos, cell_t *start, 
 	}
 	*len = i-pos;
 	if (i == set->len+pos) {
-		r = sweep_clue(depth, clue, set+1, i, cell, offset);
+		int r = sweep_clue(depth, clue, set+1, i, cell, offset);
 		if (r > 0) {
 			for (cell -= offset; cell >= start; cell -= offset) {
 				confirm_cell_color(cell, set->color_pos);
 			}
 		}
+		return r;
 	}
-	else {
-		r = 0;
-	}
-	return r;
+	return 0;
 }
 
 int match_empty(cell_t *cell) {

@@ -762,7 +762,6 @@ void nonogram(int depth, int locked_cells_sum, int locked_clues_sum, int locked_
 			init_empty_bounds(clue->sets+i, DEPTH_CUR, clue->sets[i].empty_bounds_min[depth+DEPTH_BCK], clue->sets[i].empty_bounds_max[depth+DEPTH_BCK]);
 		}
 		clear_set_negative_cache(depth, clue->sets[i].empty_bounds_min, clue->sets[i].empty_bounds_max, clue->sets[i].empty_cache);
-		init_color_bounds(clue->sets+i, DEPTH_CUR, clue->sets[i].color_bounds_min[depth+DEPTH_BCK], clue->sets[i].color_bounds_max[depth+DEPTH_BCK]);
 		init_empty_bounds(clue->sets+i, DEPTH_CUR, clue->sets[i].empty_bounds_min[depth+DEPTH_BCK], clue->sets[i].empty_bounds_max[depth+DEPTH_BCK]);
 	}
 }

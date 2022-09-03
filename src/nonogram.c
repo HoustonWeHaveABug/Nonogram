@@ -799,7 +799,7 @@ int reallocate_bounds(set_t *set, int depths_size) {
 int compare_relaxations(const void *a, const void *b) {
 	clue_t *clue_a = *(clue_t * const *)a, *clue_b = *(clue_t * const *)b;
 	if (clue_a->relaxation != clue_b->relaxation) {
-		return clue_b->relaxation-clue_a->relaxation;
+		return clue_a->relaxation-clue_b->relaxation;
 	}
 	return clue_a->pos-clue_b->pos;
 }
@@ -846,14 +846,12 @@ int sweep_clue(int depth, clue_t *clue, set_t *set, int pos, cell_t *start, int 
 	for (i = pos, cell = start; i < set->empty_bounds_max[DEPTH_CUR] && i < set->color_bounds_min[DEPTH_CUR] && match_empty(cell); i++, cell += offset);
 	if (i >= set->empty_bounds_max[DEPTH_CUR] || i >= set->color_bounds_min[DEPTH_CUR]) {
 		if (set != clue->sets_header) {
-			int len, colored_cells_n, j;
+			int len, colored_cells_n, sum, j;
 			if (i < set->color_bounds_min[DEPTH_CUR]) {
 				cell += (set->color_bounds_min[DEPTH_CUR]-i)*offset;
-				j = set->color_bounds_min[DEPTH_CUR];
+				i = set->color_bounds_min[DEPTH_CUR];
 			}
-			else {
-				j = i;
-			}
+			j = i;
 			r_sum = sweep_clue_empty_then_set(depth, clue, set, j, cell, offset, &len, &colored_cells_n);
 			if (r_sum > 0) {
 				last_ok = cell;
@@ -861,16 +859,30 @@ int sweep_clue(int depth, clue_t *clue, set_t *set, int pos, cell_t *start, int 
 			for (j++, cell += offset; j <= set->color_bounds_max[DEPTH_CUR] && match_empty(cell-offset) && (len == set->len || colored_cells_n == 0); j++, cell += offset) {
 				int r;
 				if (len > 0 && len < set->len) {
-					if (j+len > set->color_bounds_max[DEPTH_CUR]) {
+					j += len;
+					if (j > set->color_bounds_max[DEPTH_CUR]) {
 						break;
 					}
-					j += len;
 					cell += len*offset;
 				}
 				r = sweep_clue_empty_then_set(depth, clue, set, j, cell, offset, &len, &colored_cells_n);
 				if (r > 0) {
 					r_sum = sum_with_limit(r_sum, r);
 					last_ok = cell;
+				}
+			}
+			if (j > set->color_bounds_max[DEPTH_CUR]) {
+				j = set->color_bounds_max[DEPTH_CUR];
+			}
+			sum = 0;
+			for (; j > i; j--) {
+				if (set->empty_cache[j-set->empty_bounds_min[DEPTH_BCK]] == CACHE_EMPTY) {
+					if (set->color_cache[j-set->color_bounds_min[DEPTH_BCK]] > CACHE_EMPTY) {
+						sum = sum_with_limit(sum, set->color_cache[j-set->color_bounds_min[DEPTH_BCK]]);
+					}
+					if (j <= set->empty_bounds_max[DEPTH_CUR]) {
+						set->empty_cache[j-set->empty_bounds_min[DEPTH_BCK]] = sum;
+					}
 				}
 			}
 		}
@@ -884,6 +896,9 @@ int sweep_clue(int depth, clue_t *clue, set_t *set, int pos, cell_t *start, int 
 	}
 	else {
 		r_sum = 0;
+	}
+	if (i > set->empty_bounds_max[DEPTH_CUR]) {
+		i = set->empty_bounds_max[DEPTH_CUR];
 	}
 	if (r_sum > 0) {
 		for (; i >= pos; i--) {

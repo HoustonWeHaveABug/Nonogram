@@ -20,7 +20,7 @@
 #define DEPTH_CUR 0
 #define DEPTH_BCK 1
 #define DEPTHS_SIZE 2
-#define CACHE_EMPTY 0
+#define CACHE_UNKNOWN 0
 #define CACHE_CROSSED 1
 #define CACHE_CONFIRMED 2
 
@@ -41,7 +41,6 @@ struct set_s {
 	clue_t *clue;
 	int empty_before;
 	int *empty_bounds_min;
-	int *empty_bounds_max;
 	int *color_bounds_min;
 	int *color_bounds_max;
 	int *empty_cache;
@@ -89,32 +88,32 @@ void link_column_clue(clue_t *, int);
 void link_column_cell(cell_t *, cell_t *, cell_t *);
 void link_row_clue(clue_t *, int);
 void link_row_cell(cell_t *, cell_t *, cell_t *);
-void nonogram(int, int, int, int, clue_t *, option_t *);
+void nonogram(int, int, int, clue_t *, option_t *);
 void init_option(option_t *, int, int);
 int reallocate_bounds(set_t *, int);
 int compare_relaxations(const void *, const void *);
-int process_clue(int, int, int, clue_t *, int *, int *, int *);
-int sweep_clue(int, clue_t *, set_t *, int, cell_t *, int);
-int sweep_clue_empty_then_set(int, clue_t *, set_t *, int, cell_t *, int, int *, int *);
-int sweep_clue_set(int, clue_t *, set_t *, int, cell_t *, int, int *, int *);
+int process_clue(int, int, int *, int *, int *);
+int sweep_clue(set_t *, int, cell_t *);
+int sweep_clue_set(set_t *, int, cell_t *, int *, int *);
 int match_empty(cell_t *);
-int match_color_and_crossed_clue(int, clue_t *, int, int, cell_t *);
+int match_color_and_crossed_clue(int, int, cell_t *);
 int match_color_and_crossed_set(int, int, set_t *);
 void confirm_cell_color(cell_t *, int);
-void check_cell_colors(int, int, cell_t *, int *, int *);
-void update_bounds_and_cache(int *, int *, int *);
+void check_cell_colors(int, cell_t *, int *, int *);
+void update_empty_bound_and_cache(int *, int *, int *);
+void update_color_bounds_and_cache(int *, int *, int *);
 int compare_priorities(const void *, const void *);
 int compare_sets(const void *, const void *);
-void evaluate_set(int, int, int, int, set_t *, int *);
-void evaluate_option(int, int, int, int, set_t *, option_t *);
+void evaluate_set(int, int, int, set_t *, int *);
+void evaluate_option(int, int, int, set_t *, option_t *);
 int compare_evaluations(set_t *, set_t *);
 set_t *init_set_min(set_t *);
 int compare_options(const void *, const void *);
 void uncover_set(set_t *);
 void uncover_clue(clue_t *);
 void uncover_cell(cell_t *);
-void clear_set_negative_cache(int, int *, int *, int *);
-void init_empty_bounds(set_t *, int, int, int);
+void clear_set_negative_cache(int *, int *, int *);
+void init_empty_bounds(set_t *, int, int);
 void init_color_bounds(set_t *, int, int, int);
 void init_cell(cell_t *, int, int, int);
 int init_cell_tables(cell_t *);
@@ -127,11 +126,11 @@ void free_clue(clue_t *);
 void free_set(set_t *);
 void free_ints(int **);
 
-int width, height, colored, colors_n, *colors, clues_n, grid_size, all_nodes_n, run_nodes_n, failures_n;
+int width, height, colored, colors_n, *colors, clues_n, grid_size, all_nodes_n, run_nodes_n, failures_n, depth, negative_cache, offset;
 long verbose, solutions_max, solutions_n;
 unsigned time_zero;
 set_t **sorted_sets, **locked_sets;
-clue_t *clues, *clues_header, **sorted_clues, **locked_clues;
+clue_t *clues, *clues_header, **sorted_clues, **locked_clues, *current_clue;
 cell_t *cells, **locked_cells;
 
 int main(int argc, char *argv[]) {
@@ -285,7 +284,9 @@ int main(int argc, char *argv[]) {
 	run_nodes_n = 0;
 	failures_n = 0;
 	solutions_n = 0;
-	nonogram(0, 0, 0, 0, NULL, NULL);
+	depth = 0;
+	negative_cache = -1;
+	nonogram(0, 0, 0, NULL, NULL);
 	printf("\nTime %us\nAll nodes %d\nRun nodes %d\nFailures %d\nSolutions %ld\n", (unsigned)time(NULL)-time_zero, all_nodes_n, run_nodes_n, failures_n, solutions_n);
 	fflush(stdout);
 	free_data(grid_size, clues_n);
@@ -293,7 +294,7 @@ int main(int argc, char *argv[]) {
 }
 
 int read_clue(clue_t *clue, int pos, int separator) {
-	int c;
+	int c, len_min;
 	if (getchar() != DELIMITER_CLUE) {
 		fprintf(stderr, "Double quote expected as clue start\n");
 		fflush(stderr);
@@ -363,9 +364,10 @@ int read_clue(clue_t *clue, int pos, int separator) {
 	clue->sets_header = clue->sets+clue->sets_n;
 	init_set_fields(clue->sets_header, 0, COLOR_POS_UNKNOWN, clue);
 	clue->depths_size = DEPTHS_SIZE;
+	len_min = clue->sets[0].len;
+	clue->sets[0].empty_before = 0;
 	if (clue->sets_n > 0) {
-		int len_min = clue->sets[0].len, i;
-		clue->sets[0].empty_before = 0;
+		int i;
 		for (i = 1; i <= clue->sets_n; i++) {
 			if (clue->sets[i].color_pos == clue->sets[i-1].color_pos) {
 				len_min++;
@@ -396,12 +398,7 @@ int read_clue(clue_t *clue, int pos, int separator) {
 		}
 	}
 	else {
-		if (clue->pos < width) {
-			clue->relaxation = height;
-		}
-		else {
-			clue->relaxation = width;
-		}
+		clue->relaxation = len_min;
 	}
 	if (getchar() != separator) {
 		fprintf(stderr, "Invalid clue separator\n");
@@ -417,7 +414,6 @@ void init_set_fields(set_t *set, int len, int color_pos, clue_t *clue) {
 	set->color_pos = color_pos;
 	set->clue = clue;
 	set->empty_bounds_min = NULL;
-	set->empty_bounds_max = NULL;
 	set->color_bounds_min = NULL;
 	set->color_bounds_max = NULL;
 	set->empty_cache = NULL;
@@ -429,7 +425,7 @@ int finish_init_clue_sets(clue_t *clue) {
 	int len_min = 0;
 	if (clue->sets_n > 0) {
 		int i;
-		if (!init_set_tables(clue->sets, len_min, len_min, len_min, len_min+clue->relaxation)) {
+		if (!init_set_tables(clue->sets, len_min, len_min+clue->relaxation, len_min, len_min+clue->relaxation)) {
 			return 0;
 		}
 		link_set(clue->sets, clue->sets_header, clue->sets+1);
@@ -446,14 +442,14 @@ int finish_init_clue_sets(clue_t *clue) {
 		if (!init_set_tables(clue->sets_header, len_min, height, height, height-1)) {
 			return 0;
 		}
-		init_empty_bounds(clue->sets_header, DEPTH_BCK, len_min, height);
+		init_empty_bounds(clue->sets_header, DEPTH_BCK, len_min);
 		init_color_bounds(clue->sets_header, DEPTH_BCK, height, height-1);
 	}
 	else {
 		if (!init_set_tables(clue->sets_header, len_min, width, width, width-1)) {
 			return 0;
 		}
-		init_empty_bounds(clue->sets_header, DEPTH_BCK, len_min, width);
+		init_empty_bounds(clue->sets_header, DEPTH_BCK, len_min);
 		init_color_bounds(clue->sets_header, DEPTH_BCK, width, width-1);
 	}
 	if (clue->sets_n > 0) {
@@ -471,12 +467,7 @@ int init_set_tables(set_t *set, int empty_bound_min, int empty_bound_max, int co
 	if (!set->empty_bounds_min) {
 		return 0;
 	}
-	set->empty_bounds_max = alloc_mem("set->empty_bounds_max", sizeof(int), DEPTHS_SIZE);
-	if (!set->empty_bounds_max) {
-		free_set(set);
-		return 0;
-	}
-	init_empty_bounds(set, DEPTH_CUR, empty_bound_min, empty_bound_max);
+	init_empty_bounds(set, DEPTH_CUR, empty_bound_min);
 	set->color_bounds_min = alloc_mem("set->color_bounds_min", sizeof(int), DEPTHS_SIZE);
 	if (!set->color_bounds_min) {
 		free_set(set);
@@ -495,7 +486,7 @@ int init_set_tables(set_t *set, int empty_bound_min, int empty_bound_max, int co
 		return 0;
 	}
 	for (i = 0; i < empty_cache_size; i++) {
-		set->empty_cache[i] = CACHE_EMPTY;
+		set->empty_cache[i] = CACHE_UNKNOWN;
 	}
 	color_cache_size = color_bound_max-color_bound_min+1;
 	if (color_cache_size > 0) {
@@ -505,7 +496,7 @@ int init_set_tables(set_t *set, int empty_bound_min, int empty_bound_max, int co
 			return 0;
 		}
 		for (i = 0; i < color_cache_size; i++) {
-			set->color_cache[i] = CACHE_EMPTY;
+			set->color_cache[i] = CACHE_UNKNOWN;
 		}
 		set->options = alloc_mem("set->options", sizeof(option_t), color_cache_size);
 		if (!set->options) {
@@ -570,7 +561,7 @@ void link_row_cell(cell_t *cell, cell_t *last, cell_t *next) {
 	cell->row_next = next;
 }
 
-void nonogram(int depth, int locked_cells_sum, int locked_clues_sum, int locked_sets_sum, clue_t *clue_first, option_t *evaluated) {
+void nonogram(int locked_cells_sum, int locked_clues_sum, int locked_sets_sum, clue_t *clue_first, option_t *evaluated) {
 	int locked_cells_n, locked_clues_n, changes_sum, sorted_clues_n, changes_n, clue_options_min, i;
 	clue_t *clue;
 	cell_t *cell;
@@ -600,7 +591,7 @@ void nonogram(int depth, int locked_cells_sum, int locked_clues_sum, int locked_
 			clue->depths_size = depth+DEPTHS_SIZE;
 		}
 		for (i = 0; i <= clue->sets_n; i++) {
-			init_empty_bounds(clue->sets+i, depth+DEPTH_BCK, clue->sets[i].empty_bounds_min[DEPTH_CUR], clue->sets[i].empty_bounds_max[DEPTH_CUR]);
+			init_empty_bounds(clue->sets+i, depth+DEPTH_BCK, clue->sets[i].empty_bounds_min[DEPTH_CUR]);
 			init_color_bounds(clue->sets+i, depth+DEPTH_BCK, clue->sets[i].color_bounds_min[DEPTH_CUR], clue->sets[i].color_bounds_max[DEPTH_CUR]);
 		}
 	}
@@ -611,6 +602,10 @@ void nonogram(int depth, int locked_cells_sum, int locked_clues_sum, int locked_
 	else {
 		sorted_clues_n = 0;
 		for (clue = clues_header->next; clue != clues_header; clue = clue->next) {
+			clue->relaxation = 0;
+			for (i = 0; i < clue->sets_n; i++) {
+				clue->relaxation += clue->sets[i].color_bounds_max[DEPTH_CUR]-clue->sets[i].color_bounds_min[DEPTH_CUR];
+			}
 			sorted_clues[sorted_clues_n++] = clue;
 		}
 		qsort(sorted_clues, (size_t)sorted_clues_n, sizeof(clue_t *), compare_relaxations);
@@ -621,10 +616,14 @@ void nonogram(int depth, int locked_cells_sum, int locked_clues_sum, int locked_
 		for (clue = clues_header->next; clue != clues_header; clue = clue->next) {
 			clue->priority = 0;
 		}
-		for (i = 0; i < sorted_clues_n && clue_options_min > 0; i++) {
-			int clue_options_n = process_clue(depth, locked_cells_sum, locked_clues_sum, sorted_clues[i], &changes_n, &locked_cells_n, &locked_clues_n);
+		for (i = 0; i < sorted_clues_n; i++) {
+			current_clue = sorted_clues[i];
+			int clue_options_n = process_clue(locked_cells_sum, locked_clues_sum, &changes_n, &locked_cells_n, &locked_clues_n);
 			if (clue_options_n < clue_options_min) {
 				clue_options_min = clue_options_n;
+				if (clue_options_min == 0) {
+					break;
+				}
 			}
 		}
 		if (changes_n > 0 && clue_options_min > 0 && clues_header->next != clues_header) {
@@ -669,13 +668,13 @@ void nonogram(int depth, int locked_cells_sum, int locked_clues_sum, int locked_
 				for (clue = clues_header->next; clue != clues_header; clue = clue->next) {
 					for (set = clue->sets_header->next; set != clue->sets_header; set = set->next) {
 						set->options_n = 0;
-						set->solutions_n = 0;
-						set->changes_sum = 0;
 						for (i = set->color_bounds_min[DEPTH_CUR]; i <= set->color_bounds_max[DEPTH_CUR]; i++) {
-							if (set->color_cache[i-set->color_bounds_min[DEPTH_BCK]] == CACHE_EMPTY) {
+							if (set->color_cache[i-set->color_bounds_min[DEPTH_BCK]] == CACHE_UNKNOWN) {
 								set->options[set->options_n++].pos = i;
 							}
 						}
+						set->solutions_n = 0;
+						set->changes_sum = 0;
 						set->others_n = set->options_n;
 						sorted_sets[sorted_sets_n++] = set;
 					}
@@ -683,12 +682,17 @@ void nonogram(int depth, int locked_cells_sum, int locked_clues_sum, int locked_
 				do {
 					qsort(sorted_sets, (size_t)sorted_sets_n, sizeof(set_t *), compare_sets);
 					changes_n = 0;
-					evaluate_set(depth, locked_cells_sum+locked_cells_n, locked_clues_sum+locked_clues_n, locked_sets_sum+locked_sets_n, sorted_sets[0], &changes_n);
+					evaluate_set(locked_cells_sum+locked_cells_n, locked_clues_sum+locked_clues_n, locked_sets_sum+locked_sets_n, sorted_sets[0], &changes_n);
 					set_min = init_set_min(sorted_sets[0]);
-					for (i = 1; i < sorted_sets_n && set_min->others_n > 1; i++) {
-						evaluate_set(depth, locked_cells_sum+locked_cells_n, locked_clues_sum+locked_clues_n, locked_sets_sum+locked_sets_n, sorted_sets[i], &changes_n);
-						if (compare_evaluations(sorted_sets[i], set_min) < 0) {
-							set_min = init_set_min(sorted_sets[i]);
+					if (set_min->others_n > 1) {
+						for (i = 1; i < sorted_sets_n; i++) {
+							evaluate_set(locked_cells_sum+locked_cells_n, locked_clues_sum+locked_clues_n, locked_sets_sum+locked_sets_n, sorted_sets[i], &changes_n);
+							if (compare_evaluations(sorted_sets[i], set_min) < 0) {
+								set_min = init_set_min(sorted_sets[i]);
+								if (set_min->others_n < 2) {
+									break;
+								}
+							}
 						}
 					}
 					if (verbose) {
@@ -700,15 +704,19 @@ void nonogram(int depth, int locked_cells_sum, int locked_clues_sum, int locked_
 				if (set_min->options_n > 0) {
 					qsort(set_min->options, (size_t)set_min->options_n, sizeof(option_t), compare_options);
 					for (i = 0; i < set_min->options_n; i++) {
-						set_min->color_cache[set_min->options[i].pos-set_min->color_bounds_min[DEPTH_BCK]] = -depth-1;
+						set_min->color_cache[set_min->options[i].pos-set_min->color_bounds_min[DEPTH_BCK]] = negative_cache;
 					}
 					for (i = 0; i < set_min->options_n; i++) {
-						set_min->color_cache[set_min->options[i].pos-set_min->color_bounds_min[DEPTH_BCK]] = CACHE_EMPTY;
-						nonogram(depth+1, locked_cells_sum+locked_cells_n, locked_clues_sum+locked_clues_n, locked_sets_sum+locked_sets_n, set_min->clue, NULL);
-						set_min->color_cache[set_min->options[i].pos-set_min->color_bounds_min[DEPTH_BCK]] = -depth-1;
+						set_min->color_cache[set_min->options[i].pos-set_min->color_bounds_min[DEPTH_BCK]] = CACHE_UNKNOWN;
+						depth++;
+						negative_cache--;
+						nonogram(locked_cells_sum+locked_cells_n, locked_clues_sum+locked_clues_n, locked_sets_sum+locked_sets_n, set_min->clue, NULL);
+						negative_cache++;
+						depth--;
+						set_min->color_cache[set_min->options[i].pos-set_min->color_bounds_min[DEPTH_BCK]] = negative_cache;
 					}
 					for (i = 0; i < set_min->options_n; i++) {
-						set_min->color_cache[set_min->options[i].pos-set_min->color_bounds_min[DEPTH_BCK]] = CACHE_EMPTY;
+						set_min->color_cache[set_min->options[i].pos-set_min->color_bounds_min[DEPTH_BCK]] = CACHE_UNKNOWN;
 					}
 				}
 				else {
@@ -748,21 +756,21 @@ void nonogram(int depth, int locked_cells_sum, int locked_clues_sum, int locked_
 	for (clue = clues_header->next; clue->pos < width; clue = clue->next) {
 		for (cell = clue->cells_header->column_next; cell != clue->cells_header; cell = cell->column_next) {
 			for (i = COLOR_POS_EMPTY; i < colors_n; i++) {
-				if (cell->color_cache[i-COLOR_POS_EMPTY] == -depth-1) {
-					cell->color_cache[i-COLOR_POS_EMPTY] = CACHE_EMPTY;
+				if (cell->color_cache[i-COLOR_POS_EMPTY] == negative_cache) {
+					cell->color_cache[i-COLOR_POS_EMPTY] = CACHE_UNKNOWN;
 				}
 			}
 		}
 	}
 	for (clue = clues_header->next; clue != clues_header; clue = clue->next) {
 		for (i = 0; i < clue->sets_n; i++) {
-			clear_set_negative_cache(depth, clue->sets[i].color_bounds_min, clue->sets[i].color_bounds_max, clue->sets[i].color_cache);
-			clear_set_negative_cache(depth, clue->sets[i].empty_bounds_min, clue->sets[i].empty_bounds_max, clue->sets[i].empty_cache);
+			clear_set_negative_cache(clue->sets[i].color_bounds_min, clue->sets[i].color_bounds_max, clue->sets[i].color_cache);
+			clear_set_negative_cache(clue->sets[i].empty_bounds_min, clue->sets[i].color_bounds_max, clue->sets[i].empty_cache);
 			init_color_bounds(clue->sets+i, DEPTH_CUR, clue->sets[i].color_bounds_min[depth+DEPTH_BCK], clue->sets[i].color_bounds_max[depth+DEPTH_BCK]);
-			init_empty_bounds(clue->sets+i, DEPTH_CUR, clue->sets[i].empty_bounds_min[depth+DEPTH_BCK], clue->sets[i].empty_bounds_max[depth+DEPTH_BCK]);
+			init_empty_bounds(clue->sets+i, DEPTH_CUR, clue->sets[i].empty_bounds_min[depth+DEPTH_BCK]);
 		}
-		clear_set_negative_cache(depth, clue->sets[i].empty_bounds_min, clue->sets[i].empty_bounds_max, clue->sets[i].empty_cache);
-		init_empty_bounds(clue->sets+i, DEPTH_CUR, clue->sets[i].empty_bounds_min[depth+DEPTH_BCK], clue->sets[i].empty_bounds_max[depth+DEPTH_BCK]);
+		clear_set_negative_cache(clue->sets[i].empty_bounds_min, clue->sets[i].color_bounds_min, clue->sets[i].empty_cache);
+		init_empty_bounds(clue->sets+i, DEPTH_CUR, clue->sets[i].empty_bounds_min[depth+DEPTH_BCK]);
 	}
 }
 
@@ -772,17 +780,12 @@ void init_option(option_t *option, int r, int changes_sum) {
 }
 
 int reallocate_bounds(set_t *set, int depths_size) {
-	int *empty_bounds_min, *empty_bounds_max, *color_bounds_min, *color_bounds_max;
+	int *empty_bounds_min, *color_bounds_min, *color_bounds_max;
 	empty_bounds_min = realloc_mem("set->empty_bounds_min", set->empty_bounds_min, sizeof(int), depths_size);
 	if (!empty_bounds_min) {
 		return 0;
 	}
 	set->empty_bounds_min = empty_bounds_min;
-	empty_bounds_max = realloc_mem("set->empty_bounds_max", set->empty_bounds_max, sizeof(int), depths_size);
-	if (!empty_bounds_max) {
-		return 0;
-	}
-	set->empty_bounds_max = empty_bounds_max;
 	color_bounds_min = realloc_mem("set->color_bounds_min", set->color_bounds_min, sizeof(int), depths_size);
 	if (!color_bounds_min) {
 		return 0;
@@ -804,247 +807,273 @@ int compare_relaxations(const void *a, const void *b) {
 	return clue_a->pos-clue_b->pos;
 }
 
-int process_clue(int depth, int locked_cells_sum, int locked_clues_sum, clue_t *clue, int *changes_n, int *locked_cells_n, int *locked_clues_n) {
+int process_clue(int locked_cells_sum, int locked_clues_sum, int *changes_n, int *locked_cells_n, int *locked_clues_n) {
 	int clue_options_n, i;
 	cell_t *cell;
-	if (clue->pos < width) {
-		clue_options_n = sweep_clue(depth, clue, clue->sets, 0, cells+clue->pos, width);
-		for (cell = clue->cells_header->column_next; cell != clue->cells_header; cell = cell->column_next) {
-			check_cell_colors(depth, locked_cells_sum, cell, changes_n, locked_cells_n);
+	if (current_clue->pos < width) {
+		offset = width;
+		clue_options_n = sweep_clue(current_clue->sets, 0, cells+current_clue->pos);
+		for (cell = current_clue->cells_header->column_next; cell != current_clue->cells_header; cell = cell->column_next) {
+			check_cell_colors(locked_cells_sum, cell, changes_n, locked_cells_n);
 		}
 	}
 	else {
-		clue_options_n = sweep_clue(depth, clue, clue->sets, 0, cells+(clue->pos-width)*width, 1);
-		for (cell = clue->cells_header->row_next; cell != clue->cells_header; cell = cell->row_next) {
-			check_cell_colors(depth, locked_cells_sum, cell, changes_n, locked_cells_n);
+		offset = 1;
+		clue_options_n = sweep_clue(current_clue->sets, 0, cells+(current_clue->pos-width)*width);
+		for (cell = current_clue->cells_header->row_next; cell != current_clue->cells_header; cell = cell->row_next) {
+			check_cell_colors(locked_cells_sum, cell, changes_n, locked_cells_n);
 		}
 	}
-	for (i = 0; i < clue->sets_n; i++) {
-		update_bounds_and_cache(clue->sets[i].empty_bounds_min, clue->sets[i].empty_bounds_max, clue->sets[i].empty_cache);
-		update_bounds_and_cache(clue->sets[i].color_bounds_min, clue->sets[i].color_bounds_max, clue->sets[i].color_cache);
+	for (i = 0; i < current_clue->sets_n; i++) {
+		update_empty_bound_and_cache(current_clue->sets[i].empty_bounds_min, current_clue->sets[i].color_bounds_max, current_clue->sets[i].empty_cache);
+		update_color_bounds_and_cache(current_clue->sets[i].color_bounds_min, current_clue->sets[i].color_bounds_max, current_clue->sets[i].color_cache);
 	}
-	update_bounds_and_cache(clue->sets[i].empty_bounds_min, clue->sets[i].empty_bounds_max, clue->sets[i].empty_cache);
+	update_empty_bound_and_cache(current_clue->sets[i].empty_bounds_min, current_clue->sets[i].color_bounds_min, current_clue->sets[i].empty_cache);
 	if (clue_options_n == 1) {
-		clue->last->next = clue->next;
-		clue->next->last = clue->last;
-		locked_clues[locked_clues_sum+*locked_clues_n] = clue;
+		current_clue->last->next = current_clue->next;
+		current_clue->next->last = current_clue->last;
+		locked_clues[locked_clues_sum+*locked_clues_n] = current_clue;
 		*locked_clues_n += 1;
 	}
 	return clue_options_n;
 }
 
-int sweep_clue(int depth, clue_t *clue, set_t *set, int pos, cell_t *start, int offset) {
-	int r_sum, i;
-	cell_t *last_ok, *cell;
-	if (set->empty_cache[pos-set->empty_bounds_min[DEPTH_BCK]] != CACHE_EMPTY) {
-		if (set->empty_cache[pos-set->empty_bounds_min[DEPTH_BCK]] > CACHE_EMPTY) {
-			return set->empty_cache[pos-set->empty_bounds_min[DEPTH_BCK]];
-		}
-		return 0;
-	}
-	last_ok = start;
-	for (i = pos, cell = start; i < set->empty_bounds_max[DEPTH_CUR] && i < set->color_bounds_min[DEPTH_CUR] && match_empty(cell); i++, cell += offset);
-	if (i >= set->empty_bounds_max[DEPTH_CUR] || i >= set->color_bounds_min[DEPTH_CUR]) {
-		if (set != clue->sets_header) {
-			int len, colored_cells_n, sum, j;
-			if (i < set->color_bounds_min[DEPTH_CUR]) {
-				cell += (set->color_bounds_min[DEPTH_CUR]-i)*offset;
-				i = set->color_bounds_min[DEPTH_CUR];
-			}
-			j = i;
-			r_sum = sweep_clue_empty_then_set(depth, clue, set, j, cell, offset, &len, &colored_cells_n);
-			if (r_sum > 0) {
-				last_ok = cell;
-			}
-			for (j++, cell += offset; j <= set->color_bounds_max[DEPTH_CUR] && match_empty(cell-offset) && (len == set->len || colored_cells_n == 0); j++, cell += offset) {
+int sweep_clue(set_t *set, int pos, cell_t *start_cell) {
+	int r_sum = 0, i;
+	cell_t *cell;
+	for (i = pos, cell = start_cell; i < set->color_bounds_min[DEPTH_CUR] && match_empty(cell); i++, cell += offset);
+	if (i >= set->color_bounds_min[DEPTH_CUR]) {
+		cell_t *last_ok_cell = start_cell;
+		if (set != current_clue->sets_header) {
+			int j, colored_cells_n = 0, len = 0, last_ok = i, sum;
+			for (j = i; j <= set->color_bounds_max[DEPTH_CUR]; j++, cell += offset) {
 				int r;
-				if (len > 0 && len < set->len) {
-					j += len;
-					if (j > set->color_bounds_max[DEPTH_CUR]) {
-						break;
+				if (set->color_cache[j-set->color_bounds_min[DEPTH_BCK]] != CACHE_UNKNOWN) {
+					colored_cells_n = 0;
+					len = 0;
+					if (set->color_cache[j-set->color_bounds_min[DEPTH_BCK]] > CACHE_UNKNOWN) {
+						r = set->color_cache[j-set->color_bounds_min[DEPTH_BCK]];
 					}
-					cell += len*offset;
+					else {
+						r = 0;
+					}
 				}
-				r = sweep_clue_empty_then_set(depth, clue, set, j, cell, offset, &len, &colored_cells_n);
+				else {
+					if (set->empty_before) {
+						if (match_empty(cell)) {
+							r = sweep_clue_set(set, j+1, cell+offset, &colored_cells_n, &len);
+							if (r > 0) {
+								confirm_cell_color(cell, COLOR_POS_EMPTY);
+							}
+						}
+						else {
+							colored_cells_n = 0;
+							len = 0;
+							r = 0;
+						}
+					}
+					else {
+						r = sweep_clue_set(set, j, cell, &colored_cells_n, &len);
+					}
+					if (r > 0) {
+						set->color_cache[j-set->color_bounds_min[DEPTH_BCK]] = r;
+					}
+					else {
+						set->color_cache[j-set->color_bounds_min[DEPTH_BCK]] = negative_cache;
+						if (len > 0 && len < set->len) {
+							int k;
+							if (j+len <= set->color_bounds_max[DEPTH_CUR]) {
+								k = j+len;
+							}
+							else {
+								k = set->color_bounds_max[DEPTH_CUR];
+							}
+							for (; k > j; k--) {
+								if (set->color_cache[k-set->color_bounds_min[DEPTH_BCK]] == CACHE_UNKNOWN) {
+									set->color_cache[k-set->color_bounds_min[DEPTH_BCK]] = negative_cache;
+								}
+							}
+						}
+					}
+				}
 				if (r > 0) {
 					r_sum = sum_with_limit(r_sum, r);
-					last_ok = cell;
+					last_ok_cell = cell;
+					last_ok = j;
+				}
+				if (!match_empty(cell) || r < 0) {
+					j++;
+					break;
+				}
+				if (len > 0 && len < set->len) {
+					if (j+len < set->color_bounds_max[DEPTH_CUR]) {
+						j += len;
+						cell += len*offset;
+					}
+					else {
+						j = set->color_bounds_max[DEPTH_CUR];
+					}
 				}
 			}
-			if (j > set->color_bounds_max[DEPTH_CUR]) {
-				j = set->color_bounds_max[DEPTH_CUR];
+			for (j--; j > last_ok; j--) {
+				if (set->empty_cache[j-set->empty_bounds_min[DEPTH_BCK]] == CACHE_UNKNOWN) {
+					set->empty_cache[j-set->empty_bounds_min[DEPTH_BCK]] = negative_cache;
+				}
 			}
 			sum = 0;
 			for (; j > i; j--) {
-				if (set->empty_cache[j-set->empty_bounds_min[DEPTH_BCK]] == CACHE_EMPTY) {
-					if (set->color_cache[j-set->color_bounds_min[DEPTH_BCK]] > CACHE_EMPTY) {
-						sum = sum_with_limit(sum, set->color_cache[j-set->color_bounds_min[DEPTH_BCK]]);
-					}
-					if (j <= set->empty_bounds_max[DEPTH_CUR]) {
-						set->empty_cache[j-set->empty_bounds_min[DEPTH_BCK]] = sum;
-					}
+				if (set->color_cache[j-set->color_bounds_min[DEPTH_BCK]] > CACHE_UNKNOWN) {
+					sum = sum_with_limit(sum, set->color_cache[j-set->color_bounds_min[DEPTH_BCK]]);
+				}
+				if (set->empty_cache[j-set->empty_bounds_min[DEPTH_BCK]] == CACHE_UNKNOWN) {
+					set->empty_cache[j-set->empty_bounds_min[DEPTH_BCK]] = sum;
 				}
 			}
 		}
 		else {
-			r_sum = 1;
-			last_ok = cell;
+			r_sum++;
+			last_ok_cell = cell;
 		}
-		for (cell = last_ok-offset; cell >= start; cell -= offset) {
+		for (cell = last_ok_cell-offset; cell >= start_cell; cell -= offset) {
 			confirm_cell_color(cell, COLOR_POS_EMPTY);
 		}
 	}
-	else {
-		r_sum = 0;
-	}
-	if (i > set->empty_bounds_max[DEPTH_CUR]) {
-		i = set->empty_bounds_max[DEPTH_CUR];
-	}
 	if (r_sum > 0) {
 		for (; i >= pos; i--) {
-			if (set->empty_cache[i-set->empty_bounds_min[DEPTH_BCK]] == CACHE_EMPTY) {
+			if (set->empty_cache[i-set->empty_bounds_min[DEPTH_BCK]] == CACHE_UNKNOWN) {
 				set->empty_cache[i-set->empty_bounds_min[DEPTH_BCK]] = r_sum;
 			}
 		}
 	}
 	else {
 		for (; i >= pos; i--) {
-			if (set->empty_cache[i-set->empty_bounds_min[DEPTH_BCK]] == CACHE_EMPTY) {
-				set->empty_cache[i-set->empty_bounds_min[DEPTH_BCK]] = -depth-1;
+			if (set->empty_cache[i-set->empty_bounds_min[DEPTH_BCK]] == CACHE_UNKNOWN) {
+				set->empty_cache[i-set->empty_bounds_min[DEPTH_BCK]] = negative_cache;
 			}
 		}
 	}
 	return r_sum;
 }
 
-int sweep_clue_empty_then_set(int depth, clue_t *clue, set_t *set, int pos, cell_t *cell, int offset, int *len, int *colored_cells_n) {
-	int r;
-	if (set->color_cache[pos-set->color_bounds_min[DEPTH_BCK]] != CACHE_EMPTY) {
-		*len = 0;
-		*colored_cells_n = 0;
-		if (set->color_cache[pos-set->color_bounds_min[DEPTH_BCK]] > CACHE_EMPTY) {
-			return set->color_cache[pos-set->color_bounds_min[DEPTH_BCK]];
-		}
-		return 0;
-	}
-	if (set->empty_before) {
-		if (match_empty(cell)) {
-			r = sweep_clue_set(depth, clue, set, pos+1, cell+offset, offset, len, colored_cells_n);
-			if (r > 0) {
-				confirm_cell_color(cell, COLOR_POS_EMPTY);
-			}
-		}
-		else {
-			*len = 0;
-			*colored_cells_n = 0;
-			r = 0;
-		}
-	}
-	else {
-		r = sweep_clue_set(depth, clue, set, pos, cell, offset, len, colored_cells_n);
-	}
-	if (r > 0) {
-		set->color_cache[pos-set->color_bounds_min[DEPTH_BCK]] = r;
-	}
-	else {
-		set->color_cache[pos-set->color_bounds_min[DEPTH_BCK]] = -depth-1;
-		if (*len > 0 && *len < set->len) {
-			int i;
-			for (i = pos+1; i <= pos+*len && i <= set->color_bounds_max[DEPTH_CUR]; i++) {
-				if (set->color_cache[i-set->color_bounds_min[DEPTH_BCK]] == CACHE_EMPTY) {
-					set->color_cache[i-set->color_bounds_min[DEPTH_BCK]] = -depth-1;
-				}
-			}
-		}
-	}
-	return r;
-}
-
-int sweep_clue_set(int depth, clue_t *clue, set_t *set, int pos, cell_t *start, int offset, int *len, int *colored_cells_n) {
+int sweep_clue_set(set_t *set, int pos, cell_t *start_cell, int *colored_cells_n, int *len) {
 	int i;
 	cell_t *cell;
-	*colored_cells_n = 0;
-	for (i = pos, cell = start; i < set->len+pos && match_color_and_crossed_clue(depth, clue, i, set->color_pos, cell); i++, cell += offset) {
+	if (*len == set->len) {
+		start_cell += (set->len-1)*offset;
+		i = pos+set->len-1;
+	}
+	else {
+		*colored_cells_n = 0;
+		i = pos;
+	}
+	for (cell = start_cell; i < pos+set->len && match_color_and_crossed_clue(i, set->color_pos, cell); i++, cell += offset) {
 		if (cell->color_pos != COLOR_POS_UNKNOWN) {
 			*colored_cells_n += 1;
 		}
 	}
-	*len = i-pos;
-	if (i == set->len+pos) {
-		int r = sweep_clue(depth, clue, set+1, i, cell, offset);
+	if (i == pos+set->len) {
+		int r;
+		set_t *next_set = set+1;
+		if (next_set->empty_cache[i-next_set->empty_bounds_min[DEPTH_BCK]] > CACHE_UNKNOWN) {
+			r = next_set->empty_cache[i-next_set->empty_bounds_min[DEPTH_BCK]];
+		}
+		else if (next_set->empty_cache[i-next_set->empty_bounds_min[DEPTH_BCK]] < CACHE_UNKNOWN) {
+			r = 0;
+		}
+		else {
+			r = sweep_clue(next_set, i, cell);
+		}
 		if (r > 0) {
-			for (cell -= offset; cell >= start; cell -= offset) {
+			for (cell -= offset; cell >= start_cell; cell -= offset) {
 				confirm_cell_color(cell, set->color_pos);
 			}
+			*len = set->len;
+		}
+		else {
+			*len = 0;
 		}
 		return r;
 	}
-	return 0;
+	*len = i-pos;
+	if (*colored_cells_n == 0) {
+		return 0;
+	}
+	return -1;
 }
 
 int match_empty(cell_t *cell) {
-	if (cell->color_cache[0] != CACHE_EMPTY) {
-		return cell->color_cache[0] > CACHE_EMPTY;
+	if (cell->color_cache[0] != CACHE_UNKNOWN) {
+		return cell->color_cache[0] > CACHE_UNKNOWN;
 	}
 	cell->color_cache[0] = CACHE_CROSSED;
 	return 1;
 }
 
-int match_color_and_crossed_clue(int depth, clue_t *clue, int crossed_pos, int color_pos, cell_t *cell) {
+int match_color_and_crossed_clue(int crossed_pos, int color_pos, cell_t *cell) {
 	clue_t *crossed;
 	int clue_pos, i;
-	if (cell->color_cache[color_pos-COLOR_POS_EMPTY] != CACHE_EMPTY) {
-		return cell->color_cache[color_pos-COLOR_POS_EMPTY] > CACHE_EMPTY;
+	if (cell->color_cache[color_pos-COLOR_POS_EMPTY] != CACHE_UNKNOWN) {
+		return cell->color_cache[color_pos-COLOR_POS_EMPTY] > CACHE_UNKNOWN;
 	}
-	if (clue->pos < width) {
+	if (current_clue->pos < width) {
 		crossed = clues+width+crossed_pos;
-		clue_pos = clue->pos;
+		clue_pos = current_clue->pos;
 	}
 	else {
 		crossed = clues+crossed_pos;
-		clue_pos = clue->pos-width;
+		clue_pos = current_clue->pos-width;
 	}
 	for (i = 0; i < crossed->sets_n && !match_color_and_crossed_set(clue_pos, color_pos, crossed->sets+i); i++);
 	if (i < crossed->sets_n) {
 		cell->color_cache[color_pos-COLOR_POS_EMPTY] = CACHE_CROSSED;
 		return 1;
 	}
-	cell->color_cache[color_pos-COLOR_POS_EMPTY] = -depth-1;
+	cell->color_cache[color_pos-COLOR_POS_EMPTY] = negative_cache;
 	return 0;
 }
 
 int match_color_and_crossed_set(int clue_pos, int color_pos, set_t *crossed) {
-	int i;
-	if (crossed->color_pos != color_pos || crossed->empty_before+crossed->color_bounds_min[DEPTH_CUR] > clue_pos || crossed->len+crossed->empty_before+crossed->color_bounds_max[DEPTH_CUR] <= clue_pos) {
+	int max, min;
+	if (crossed->color_pos != color_pos) {
 		return 0;
 	}
-	i = clue_pos-crossed->len-crossed->empty_before;
-	if (i < crossed->color_bounds_min[DEPTH_BCK]) {
-		i = crossed->color_bounds_min[DEPTH_BCK];
+	max = clue_pos-crossed->empty_before;
+	if (max < crossed->color_bounds_min[DEPTH_CUR]) {
+		return 0;
 	}
-	while (i <= clue_pos-crossed->empty_before && crossed->color_cache[i-crossed->color_bounds_min[DEPTH_BCK]] < CACHE_EMPTY) {
-		i++;
+	min = max-crossed->len+1;
+	if (min > crossed->color_bounds_max[DEPTH_CUR]) {
+		return 0;
 	}
-	return i <= clue_pos-crossed->empty_before;
+	if (min < crossed->color_bounds_min[DEPTH_CUR]) {
+		min = crossed->color_bounds_min[DEPTH_CUR];
+	}
+	if (max > crossed->color_bounds_max[DEPTH_CUR]) {
+		max = crossed->color_bounds_max[DEPTH_CUR];
+	}
+	while (min <= max && crossed->color_cache[min-crossed->color_bounds_min[DEPTH_BCK]] < CACHE_UNKNOWN) {
+		min++;
+	}
+	return min <= max;
 }
 
 void confirm_cell_color(cell_t *cell, int color_pos) {
-	if (cell->color_cache[color_pos-COLOR_POS_EMPTY] == CACHE_EMPTY || cell->color_cache[color_pos-COLOR_POS_EMPTY] == CACHE_CROSSED) {
+	if (cell->color_cache[color_pos-COLOR_POS_EMPTY] == CACHE_UNKNOWN || cell->color_cache[color_pos-COLOR_POS_EMPTY] == CACHE_CROSSED) {
 		cell->color_cache[color_pos-COLOR_POS_EMPTY] = CACHE_CONFIRMED;
 	}
 }
 
-void check_cell_colors(int depth, int locked_cells_sum, cell_t *cell, int *changes_n, int *locked_cells_n) {
+void check_cell_colors(int locked_cells_sum, cell_t *cell, int *changes_n, int *locked_cells_n) {
 	int color_pos = COLOR_POS_UNKNOWN, i;
 	for (i = COLOR_POS_EMPTY; i < colors_n; i++) {
-		if (cell->color_cache[i-COLOR_POS_EMPTY] == CACHE_EMPTY || cell->color_cache[i-COLOR_POS_EMPTY] == CACHE_CROSSED) {
-			cell->color_cache[i-COLOR_POS_EMPTY] = -depth-1;
+		if (cell->color_cache[i-COLOR_POS_EMPTY] == CACHE_UNKNOWN || cell->color_cache[i-COLOR_POS_EMPTY] == CACHE_CROSSED) {
+			cell->color_cache[i-COLOR_POS_EMPTY] = negative_cache;
 			clues[cell->column].priority++;
 			clues[width+cell->row].priority++;
 			*changes_n += 1;
 		}
 		else if (cell->color_cache[i-COLOR_POS_EMPTY] == CACHE_CONFIRMED) {
-			cell->color_cache[i-COLOR_POS_EMPTY] = CACHE_EMPTY;
+			cell->color_cache[i-COLOR_POS_EMPTY] = CACHE_UNKNOWN;
 			if (color_pos == COLOR_POS_UNKNOWN) {
 				color_pos = i;
 			}
@@ -1065,15 +1094,26 @@ void check_cell_colors(int depth, int locked_cells_sum, cell_t *cell, int *chang
 	}
 }
 
-void update_bounds_and_cache(int *bounds_min, int *bounds_max, int *cache) {
+void update_empty_bound_and_cache(int *bounds_min, int *bounds_max, int *cache) {
 	int i;
-	for (i = bounds_min[DEPTH_CUR]; i <= bounds_max[DEPTH_CUR] && cache[i-bounds_min[DEPTH_BCK]] <= CACHE_EMPTY; i++);
+	for (i = bounds_min[DEPTH_CUR]; i <= bounds_max[DEPTH_CUR] && cache[i-bounds_min[DEPTH_BCK]] <= CACHE_UNKNOWN; i++);
 	bounds_min[DEPTH_CUR] = i;
-	for (i = bounds_max[DEPTH_CUR]; i >= bounds_min[DEPTH_CUR] && cache[i-bounds_min[DEPTH_BCK]] <= CACHE_EMPTY; i--);
+	for (i = bounds_min[DEPTH_CUR]; i <= bounds_max[DEPTH_CUR]; i++) {
+		if (cache[i-bounds_min[DEPTH_BCK]] > CACHE_UNKNOWN) {
+			cache[i-bounds_min[DEPTH_BCK]] = CACHE_UNKNOWN;
+		}
+	}
+}
+
+void update_color_bounds_and_cache(int *bounds_min, int *bounds_max, int *cache) {
+	int i;
+	for (i = bounds_min[DEPTH_CUR]; i <= bounds_max[DEPTH_CUR] && cache[i-bounds_min[DEPTH_BCK]] <= CACHE_UNKNOWN; i++);
+	bounds_min[DEPTH_CUR] = i;
+	for (i = bounds_max[DEPTH_CUR]; i >= bounds_min[DEPTH_CUR] && cache[i-bounds_min[DEPTH_BCK]] <= CACHE_UNKNOWN; i--);
 	bounds_max[DEPTH_CUR] = i;
 	for (i = bounds_min[DEPTH_CUR]; i <= bounds_max[DEPTH_CUR]; i++) {
-		if (cache[i-bounds_min[DEPTH_BCK]] > CACHE_EMPTY) {
-			cache[i-bounds_min[DEPTH_BCK]] = CACHE_EMPTY;
+		if (cache[i-bounds_min[DEPTH_BCK]] > CACHE_UNKNOWN) {
+			cache[i-bounds_min[DEPTH_BCK]] = CACHE_UNKNOWN;
 		}
 	}
 }
@@ -1099,20 +1139,20 @@ int compare_sets(const void *a, const void *b) {
 	return 1;
 }
 
-void evaluate_set(int depth, int locked_cells_sum, int locked_clues_sum, int locked_sets_sum, set_t *set, int *changes_n) {
+void evaluate_set(int locked_cells_sum, int locked_clues_sum, int locked_sets_sum, set_t *set, int *changes_n) {
 	int options_n = set->options_n, i;
 	for (i = 0; i < options_n; i++) {
-		set->color_cache[set->options[i].pos-set->color_bounds_min[DEPTH_BCK]] = -depth-1;
+		set->color_cache[set->options[i].pos-set->color_bounds_min[DEPTH_BCK]] = negative_cache;
 	}
 	set->options_n = 0;
 	set->solutions_n = 0;
 	set->changes_sum = 0;
 	for (i = 0; i < options_n; i++) {
-		evaluate_option(depth, locked_cells_sum, locked_clues_sum, locked_sets_sum, set, set->options+i);
+		evaluate_option(locked_cells_sum, locked_clues_sum, locked_sets_sum, set, set->options+i);
 	}
 	for (i = 0; i < options_n; i++) {
 		if (set->options[i].r >= 0) {
-			set->color_cache[set->options[i].pos-set->color_bounds_min[DEPTH_BCK]] = CACHE_EMPTY;
+			set->color_cache[set->options[i].pos-set->color_bounds_min[DEPTH_BCK]] = CACHE_UNKNOWN;
 			set->options[set->options_n++].pos = set->options[i].pos;
 		}
 	}
@@ -1120,10 +1160,14 @@ void evaluate_set(int depth, int locked_cells_sum, int locked_clues_sum, int loc
 	*changes_n += options_n-set->options_n;
 }
 
-void evaluate_option(int depth, int locked_cells_sum, int locked_clues_sum, int locked_sets_sum, set_t *set, option_t *option) {
-	set->color_cache[option->pos-set->color_bounds_min[DEPTH_BCK]] = CACHE_EMPTY;
-	nonogram(depth+1, locked_cells_sum, locked_clues_sum, locked_sets_sum, set->clue, option);
-	set->color_cache[option->pos-set->color_bounds_min[DEPTH_BCK]] = -depth-1;
+void evaluate_option(int locked_cells_sum, int locked_clues_sum, int locked_sets_sum, set_t *set, option_t *option) {
+	set->color_cache[option->pos-set->color_bounds_min[DEPTH_BCK]] = CACHE_UNKNOWN;
+	depth++;
+	negative_cache--;
+	nonogram(locked_cells_sum, locked_clues_sum, locked_sets_sum, set->clue, option);
+	negative_cache++;
+	depth--;
+	set->color_cache[option->pos-set->color_bounds_min[DEPTH_BCK]] = negative_cache;
 	if (option->r >= 0) {
 		set->solutions_n += option->r;
 		set->changes_sum += option->changes_sum;
@@ -1142,7 +1186,7 @@ int compare_evaluations(set_t *set_a, set_t *set_b) {
 
 set_t *init_set_min(set_t *set) {
 	if (verbose) {
-		printf("set_min %d %d %d\n", set->options_n, set->solutions_n, set->changes_sum);
+		printf("set_min %d %d %d\n", set->others_n, set->solutions_n, set->changes_sum);
 		fflush(stdout);
 	}
 	return set;
@@ -1174,22 +1218,21 @@ void uncover_cell(cell_t *cell) {
 	cell->row_last->row_next = cell;
 	cell->column_next->column_last = cell;
 	cell->column_last->column_next = cell;
-	cell->color_cache[cell->color_pos-COLOR_POS_EMPTY] = CACHE_EMPTY;
+	cell->color_cache[cell->color_pos-COLOR_POS_EMPTY] = CACHE_UNKNOWN;
 	cell->color_pos = COLOR_POS_UNKNOWN;
 }
 
-void clear_set_negative_cache(int depth, int *bounds_min, int *bounds_max, int *cache) {
+void clear_set_negative_cache(int *bounds_min, int *bounds_max, int *cache) {
 	int i;
 	for (i = bounds_min[depth+DEPTH_BCK]; i <= bounds_max[depth+DEPTH_BCK]; i++) {
-		if (cache[i-bounds_min[DEPTH_BCK]] == -depth-1) {
-			cache[i-bounds_min[DEPTH_BCK]] = CACHE_EMPTY;
+		if (cache[i-bounds_min[DEPTH_BCK]] == negative_cache) {
+			cache[i-bounds_min[DEPTH_BCK]] = CACHE_UNKNOWN;
 		}
 	}
 }
 
-void init_empty_bounds(set_t *set, int pos, int bound_min, int bound_max) {
+void init_empty_bounds(set_t *set, int pos, int bound_min) {
 	set->empty_bounds_min[pos] = bound_min;
-	set->empty_bounds_max[pos] = bound_max;
 }
 
 void init_color_bounds(set_t *set, int pos, int bound_min, int bound_max) {
@@ -1210,7 +1253,7 @@ int init_cell_tables(cell_t *cell) {
 		return 0;
 	}
 	for (i = COLOR_POS_EMPTY; i < colors_n; i++) {
-		cell->color_cache[i-COLOR_POS_EMPTY] = CACHE_EMPTY;
+		cell->color_cache[i-COLOR_POS_EMPTY] = CACHE_UNKNOWN;
 	}
 	return 1;
 }
@@ -1293,7 +1336,6 @@ void free_set(set_t *set) {
 	free_ints(&set->empty_cache);
 	free_ints(&set->color_bounds_max);
 	free_ints(&set->color_bounds_min);
-	free_ints(&set->empty_bounds_max);
 	free_ints(&set->empty_bounds_min);
 }
 

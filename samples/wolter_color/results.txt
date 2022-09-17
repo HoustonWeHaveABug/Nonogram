@@ -7,20 +7,20 @@ CPU: Intel i3-4150 3.50 GHz - One core used
 puzzle 		size 	colors	time
 
 #47: Map 	31 x 18 5	0s00
-#220: Onions 	40 x 40 5	0s02
-#1503: Bob 	25 x 25 3	0s10
+#220: Onions 	40 x 40 5	0s00
+#1503: Bob 	25 x 25 3	0s07
 #2257: JarJar 	55 x 60 3	0s04
-#4940: Babe 	45 x 45 3	0s10
-#5193: Face 	30 x 30 5	2s25
-#2684: Censored 48 x 64 4	17m55s
-#2073: Peanut 	35 x 35 3	0s30
-#4364: Snowman 	40 x 40 5	0s07
-#2817: Shark 	50 x 45 3	1s31
-#4809: EFB 	50 x 40 4	10s92
-#2814: Comet 	45 x 50 3	0s11
-#3149: Ex 	40 x 40 5	44s56
-#4445: Pinup 	66 x 99 4	6s29
-#2984: Heart 	25 x 25 5	2s39
-#2498: Gecko 	75 x 45 5	35s54
+#4940: Babe 	45 x 45 3	0s08
+#5193: Face 	30 x 30 5	2s03
+#2684: Censored 48 x 64 4	15m30s
+#2073: Peanut 	35 x 35 3	0s25
+#4364: Snowman 	40 x 40 5	0s05
+#2817: Shark 	50 x 45 3	0s92
+#4809: EFB 	50 x 40 4	9s07
+#2814: Comet 	45 x 50 3	0s08
+#3149: Ex 	40 x 40 5	37s19
+#4445: Pinup 	66 x 99 4	4s84
+#2984: Heart 	25 x 25 5	1s70
+#2498: Gecko 	75 x 45 5	28s69
 #3620: Addition 20 x 20 5	+
 #672: Web 	52 x 52 4	+

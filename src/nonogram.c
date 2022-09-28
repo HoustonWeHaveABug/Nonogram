@@ -48,6 +48,7 @@ struct set_s {
 	int options_n;
 	int solutions_n;
 	int changes_sum;
+	int skipped;
 	int others_n;
 	set_t *last;
 	set_t *next;
@@ -121,7 +122,7 @@ void free_clue(clue_t *);
 void free_set(set_t *);
 void free_ints(int **);
 
-int width, height, colored, colors_n, *colors, clues_n, grid_size, all_nodes_n, run_nodes_n, failures_n, depth, completed_depth, completed_cells_n, negative_cache, offset;
+int width, height, colored, colors_n, *colors, clues_n, grid_size, all_nodes_n, run_nodes_n, failures_n, depth, completed_depth, negative_cache, offset;
 long verbose, solutions_max, solutions_n;
 unsigned time_zero;
 set_t **sorted_sets, **locked_sets;
@@ -281,7 +282,6 @@ int main(int argc, char *argv[]) {
 	solutions_n = 0;
 	depth = 0;
 	completed_depth = 0;
-	completed_cells_n = 0;
 	negative_cache = -1;
 	nonogram(0, 0, 0, NULL, NULL);
 	printf("\nTime %us\nAll nodes %d\nRun nodes %d\nFailures %d\nSolutions %ld\n", (unsigned)time(NULL)-time_zero, all_nodes_n, run_nodes_n, failures_n, solutions_n);
@@ -649,7 +649,7 @@ void nonogram(int locked_cells_sum, int locked_clues_sum, int locked_sets_sum, c
 		}
 		else {
 			if (verbose || clues_header->next == clues_header) {
-				printf("\nTime %us\nAll nodes %d\nRun nodes %d\nFailures %d\nDepth %d\nCells %d Completed %d Locked %d\n", (unsigned)time(NULL)-time_zero, all_nodes_n, run_nodes_n, failures_n, depth, grid_size, completed_cells_n, locked_cells_sum+locked_cells_n);
+				printf("\nTime %us\nAll nodes %d\nRun nodes %d\nFailures %d\nDepth %d Completed %d\nCells %d Locked %d\n", (unsigned)time(NULL)-time_zero, all_nodes_n, run_nodes_n, failures_n, depth, completed_depth, grid_size, locked_cells_sum+locked_cells_n);
 				fflush(stdout);
 			}
 			if (clues_header->next != clues_header) {
@@ -673,6 +673,7 @@ void nonogram(int locked_cells_sum, int locked_clues_sum, int locked_sets_sum, c
 						}
 						set->solutions_n = 0;
 						set->changes_sum = 0;
+						set->skipped = 0;
 						set->others_n = set->options_n;
 						sorted_sets[sorted_sets_n++] = set;
 					}
@@ -707,7 +708,6 @@ void nonogram(int locked_cells_sum, int locked_clues_sum, int locked_sets_sum, c
 					for (i = 0; i < set_min->options_n; i++) {
 						if (depth == completed_depth && i == set_min->options_n-1) {
 							completed_depth = depth+1;
-							completed_cells_n = locked_cells_sum+locked_cells_n;
 						}
 						set_min->color_cache[set_min->options[i].pos-set_min->color_bounds_min[DEPTH_BCK]] = CACHE_UNKNOWN;
 						depth++;
@@ -847,20 +847,22 @@ int sweep_clue(set_t *set, int pos, cell_t *start_cell) {
 	if (i >= set->color_bounds_min[DEPTH_CUR]) {
 		cell_t *last_ok_cell = start_cell;
 		if (set != current_clue->sets_header) {
-			int j, colored_cells_n = 0, len = 0, last_ok = i, sum;
+			int j, colored_cells_n, len = 0, last_ok = i, sum;
 			for (j = i; j <= set->color_bounds_max[DEPTH_CUR]; j++, cell += offset) {
-				int r;
 				if (set->color_cache[j-set->color_bounds_min[DEPTH_BCK]] != CACHE_UNKNOWN) {
-					colored_cells_n = 0;
 					len = 0;
 					if (set->color_cache[j-set->color_bounds_min[DEPTH_BCK]] > CACHE_UNKNOWN) {
-						r = set->color_cache[j-set->color_bounds_min[DEPTH_BCK]];
+						r_sum = sum_with_limit(r_sum, set->color_cache[j-set->color_bounds_min[DEPTH_BCK]]);
+						last_ok_cell = cell;
+						last_ok = j;
 					}
-					else {
-						r = 0;
+					if (cell->color_cache[0] < CACHE_UNKNOWN) {
+						j++;
+						break;
 					}
 				}
 				else {
+					int r;
 					if (set->empty_before) {
 						if (cell->color_cache[0] >= CACHE_UNKNOWN) {
 							r = sweep_clue_set(set, j+1, cell+offset, &colored_cells_n, &len);
@@ -869,7 +871,6 @@ int sweep_clue(set_t *set, int pos, cell_t *start_cell) {
 							}
 						}
 						else {
-							colored_cells_n = 0;
 							len = 0;
 							r = 0;
 						}
@@ -879,12 +880,15 @@ int sweep_clue(set_t *set, int pos, cell_t *start_cell) {
 					}
 					if (r > 0) {
 						set->color_cache[j-set->color_bounds_min[DEPTH_BCK]] = r;
+						r_sum = sum_with_limit(r_sum, r);
+						last_ok_cell = cell;
+						last_ok = j;
 					}
 					else {
 						set->color_cache[j-set->color_bounds_min[DEPTH_BCK]] = negative_cache;
 						if (len > 0 && len < set->len) {
 							int k;
-							if (j+len <= set->color_bounds_max[DEPTH_CUR]) {
+							if (j+len < set->color_bounds_max[DEPTH_CUR]) {
 								k = j+len;
 							}
 							else {
@@ -897,39 +901,30 @@ int sweep_clue(set_t *set, int pos, cell_t *start_cell) {
 							}
 						}
 					}
-				}
-				if (r > 0) {
-					r_sum = sum_with_limit(r_sum, r);
-					last_ok_cell = cell;
-					last_ok = j;
-				}
-				if (cell->color_cache[0] < CACHE_UNKNOWN || r < 0) {
-					j++;
-					break;
-				}
-				if (len > 0 && len < set->len) {
-					if (j+len < set->color_bounds_max[DEPTH_CUR]) {
-						j += len;
-						cell += len*offset;
+					if (cell->color_cache[0] < CACHE_UNKNOWN || r < 0) {
+						j++;
+						break;
 					}
-					else {
-						j = set->color_bounds_max[DEPTH_CUR];
+					if (len > 0 && len < set->len) {
+						if (j+len < set->color_bounds_max[DEPTH_CUR]) {
+							j += len;
+							cell += len*offset;
+						}
+						else {
+							j = set->color_bounds_max[DEPTH_CUR];
+						}
 					}
 				}
 			}
 			for (j--; j > last_ok; j--) {
-				if (set->empty_cache[j-set->empty_bounds_min[DEPTH_BCK]] == CACHE_UNKNOWN) {
-					set->empty_cache[j-set->empty_bounds_min[DEPTH_BCK]] = negative_cache;
-				}
+				set->empty_cache[j-set->empty_bounds_min[DEPTH_BCK]] = negative_cache;
 			}
 			sum = 0;
 			for (; j > i; j--) {
 				if (set->color_cache[j-set->color_bounds_min[DEPTH_BCK]] > CACHE_UNKNOWN) {
 					sum = sum_with_limit(sum, set->color_cache[j-set->color_bounds_min[DEPTH_BCK]]);
 				}
-				if (set->empty_cache[j-set->empty_bounds_min[DEPTH_BCK]] == CACHE_UNKNOWN) {
-					set->empty_cache[j-set->empty_bounds_min[DEPTH_BCK]] = sum;
-				}
+				set->empty_cache[j-set->empty_bounds_min[DEPTH_BCK]] = sum;
 			}
 		}
 		else {
@@ -942,16 +937,12 @@ int sweep_clue(set_t *set, int pos, cell_t *start_cell) {
 	}
 	if (r_sum > 0) {
 		for (; i >= pos; i--) {
-			if (set->empty_cache[i-set->empty_bounds_min[DEPTH_BCK]] == CACHE_UNKNOWN) {
-				set->empty_cache[i-set->empty_bounds_min[DEPTH_BCK]] = r_sum;
-			}
+			set->empty_cache[i-set->empty_bounds_min[DEPTH_BCK]] = r_sum;
 		}
 	}
 	else {
 		for (; i >= pos; i--) {
-			if (set->empty_cache[i-set->empty_bounds_min[DEPTH_BCK]] == CACHE_UNKNOWN) {
-				set->empty_cache[i-set->empty_bounds_min[DEPTH_BCK]] = negative_cache;
-			}
+			set->empty_cache[i-set->empty_bounds_min[DEPTH_BCK]] = negative_cache;
 		}
 	}
 	return r_sum;
@@ -1087,9 +1078,34 @@ void evaluate_set(int locked_cells_sum, int locked_clues_sum, int locked_sets_su
 	set->options_n = 0;
 	set->solutions_n = 0;
 	set->changes_sum = 0;
-	for (i = 0; i < options_n; i++) {
-		evaluate_option(locked_cells_sum, locked_clues_sum, locked_sets_sum, set, set->options+i);
+	set->skipped = 0;
+	i = 0;
+	do {
+		int j, lo, hi;
+		for (j = i+1; j < options_n; j++) {
+			if (set->options[j-1].pos+1 < set->options[j].pos) {
+				break;
+			}
+		}
+		for (lo = i; lo < j; lo++) {
+			evaluate_option(locked_cells_sum, locked_clues_sum, locked_sets_sum, set, set->options+lo);
+			if (set->options[lo].r >= 0) {
+				break;
+			}
+		}
+		for (hi = j-1; hi > lo; hi--) {
+			evaluate_option(locked_cells_sum, locked_clues_sum, locked_sets_sum, set, set->options+hi);
+			if (set->options[hi].r >= 0) {
+				break;
+			}
+		}
+		for (hi--; hi > lo; hi--) {
+			init_option(set->options+hi, 0, 0);
+			set->skipped++;
+		}
+		i = j;
 	}
+	while (i < options_n);
 	for (i = 0; i < options_n; i++) {
 		if (set->options[i].r >= 0) {
 			set->color_cache[set->options[i].pos-set->color_bounds_min[DEPTH_BCK]] = CACHE_UNKNOWN;
@@ -1118,6 +1134,9 @@ int compare_evaluations(set_t *set_a, set_t *set_b) {
 	if (set_a->others_n != set_b->others_n) {
 		return set_a->others_n-set_b->others_n;
 	}
+	if (set_a->skipped != set_b->skipped) {
+		return set_a->skipped-set_b->skipped;
+	}
 	if (set_a->solutions_n != set_b->solutions_n) {
 		return set_b->solutions_n-set_a->solutions_n;
 	}
@@ -1126,7 +1145,7 @@ int compare_evaluations(set_t *set_a, set_t *set_b) {
 
 set_t *init_set_min(set_t *set) {
 	if (verbose) {
-		printf("set_min %d %d %d\n", set->others_n, set->solutions_n, set->changes_sum);
+		printf("set_min %d %d %d %d\n", set->others_n, set->skipped, set->solutions_n, set->changes_sum);
 		fflush(stdout);
 	}
 	return set;

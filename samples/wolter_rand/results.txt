@@ -4,13 +4,13 @@ From Jan Wolter's Survey - https://webpbn.com/survey
 Environment: Cygwin on Windows 7 Professional
 CPU: Intel i3-4150 3.50 GHz - One core used
 
-0 to 0.09 sec		3387
-0.10 to 0.19 sec	747
-0.20 to 0.49 sec	551
-0.50 to 0.99 sec	156
-1.00 to 3.99 sec	98
-4.00 to 9.99 sec	24
-10.00 to 29.99 sec	21
-30.00 to 59.99 sec	2
-1 min to 2 min		5
-2 min or more		9
+0 to 0.09 sec		3484
+0.10 to 0.19 sec	762
+0.20 to 0.49 sec	493
+0.50 to 0.99 sec	122
+1.00 to 3.99 sec	88
+4.00 to 9.99 sec	20
+10.00 to 29.99 sec	14
+30.00 to 59.99 sec	5
+1 min to 2 min		2
+2 min or more		10

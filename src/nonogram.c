@@ -44,8 +44,8 @@ struct set_s {
 	int *color_bounds_max;
 	int *empty_cache;
 	int *color_cache;
-	option_t *options;
 	int options_n;
+	option_t *options;
 	int solutions_n;
 	int changes_sum;
 	int skipped;
@@ -666,14 +666,14 @@ void nonogram(int locked_cells_sum, int locked_clues_sum, int locked_sets_sum, c
 					}
 					for (set = clue->sets_header->next; set != clue->sets_header; set = set->next) {
 						set->options_n = 0;
+						set->solutions_n = 0;
+						set->changes_sum = 0;
+						set->skipped = 0;
 						for (i = set->color_bounds_min[DEPTH_CUR]; i <= set->color_bounds_max[DEPTH_CUR]; i++) {
 							if (set->color_cache[i-set->color_bounds_min[DEPTH_BCK]] == CACHE_UNKNOWN) {
 								set->options[set->options_n++].pos = i;
 							}
 						}
-						set->solutions_n = 0;
-						set->changes_sum = 0;
-						set->skipped = 0;
 						set->others_n = set->options_n;
 						sorted_sets[sorted_sets_n++] = set;
 					}
@@ -892,6 +892,13 @@ int sweep_clue(set_t *set, int pos, cell_t *start_cell) {
 								k = j+len;
 							}
 							else {
+								if (cell->color_cache[0] < CACHE_UNKNOWN || r < 0) {
+									for (k = set->color_bounds_max[DEPTH_CUR]; k > j; k--) {
+										if (set->empty_cache[k-set->empty_bounds_min[DEPTH_BCK]] == CACHE_UNKNOWN) {
+											set->empty_cache[k-set->empty_bounds_min[DEPTH_BCK]] = negative_cache;
+										}
+									}
+								}
 								k = set->color_bounds_max[DEPTH_CUR];
 							}
 							for (; k > j; k--) {
@@ -917,7 +924,9 @@ int sweep_clue(set_t *set, int pos, cell_t *start_cell) {
 				}
 			}
 			for (j--; j > last_ok; j--) {
-				set->empty_cache[j-set->empty_bounds_min[DEPTH_BCK]] = negative_cache;
+				if (set->empty_cache[j-set->empty_bounds_min[DEPTH_BCK]] == CACHE_UNKNOWN) {
+					set->empty_cache[j-set->empty_bounds_min[DEPTH_BCK]] = negative_cache;
+				}
 			}
 			sum = 0;
 			for (; j > i; j--) {
@@ -1109,7 +1118,7 @@ void evaluate_set(int locked_cells_sum, int locked_clues_sum, int locked_sets_su
 	for (i = 0; i < options_n; i++) {
 		if (set->options[i].r >= 0) {
 			set->color_cache[set->options[i].pos-set->color_bounds_min[DEPTH_BCK]] = CACHE_UNKNOWN;
-			set->options[set->options_n++].pos = set->options[i].pos;
+			set->options[set->options_n++] = set->options[i];
 		}
 	}
 	set->others_n = set->options_n-set->solutions_n;

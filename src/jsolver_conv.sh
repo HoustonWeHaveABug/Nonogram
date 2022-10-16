@@ -10,7 +10,12 @@ cat $1 | (
 	read LINE
 	while [ "$LINE" != "#" ]
 	do
-		echo -n $LINE | sed s/" 0$"//g | sed s/^/\"/g | sed s/$/\"/g | sed s/" "/,/g >>$PUZZLE_TMP
+		if [ "$LINE" != " 0" ]
+		then
+			echo -n $LINE | sed s/" 0$"//g | sed s/^/\"/g | sed s/$/\"/g | sed s/" "/,/g >>$PUZZLE_TMP
+		else
+			echo -n \"0\" >>$PUZZLE_TMP
+		fi
 		let COLS=$COLS+1
 		read LINE
 		if [ "$LINE" != "#" ]
@@ -23,7 +28,12 @@ cat $1 | (
 	read LINE
 	while [ "$LINE" != "#" ]
 	do
-		echo -n $LINE | sed s/" 0$"//g | sed s/^/\"/g | sed s/$/\"/g | sed s/" "/,/g >>$PUZZLE_TMP
+		if [ "$LINE" != " 0" ]
+		then
+			echo -n $LINE | sed s/" 0$"//g | sed s/^/\"/g | sed s/$/\"/g | sed s/" "/,/g >>$PUZZLE_TMP
+		else
+			echo -n \"0\" >>$PUZZLE_TMP
+		fi
 		let ROWS=$ROWS+1
 		read LINE
 		if [ "$LINE" != "#" ]

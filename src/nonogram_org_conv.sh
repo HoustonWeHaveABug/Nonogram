@@ -15,8 +15,7 @@ else
 fi
 WGET_LOG=./nonogram_org_conv_wget.log
 WGET_OUTPUT=./nonogram_org_conv_wget.html
-PUZZLE_URL="https://www.nonograms.org/$PUZZLE_FOLDER/i/$1"
-wget -o $WGET_LOG -O $WGET_OUTPUT $PUZZLE_URL
+wget -o $WGET_LOG -O $WGET_OUTPUT https://www.nonograms.org/$PUZZLE_FOLDER/i/$1 --inet4-only --no-check-certificate
 if [ ! -s $WGET_OUTPUT ]
 then
 	echo "Could not download puzzle $1 from folder $PUZZLE_FOLDER"

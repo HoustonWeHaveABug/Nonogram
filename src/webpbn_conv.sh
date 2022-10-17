@@ -12,8 +12,15 @@ then
 	rm -f $WGET_LOG $WGET_OUTPUT
 	exit 1
 fi
-LINES=`grep -e ": rows" -e ": columns" $WGET_OUTPUT | wc -l`
-if [ $LINES -ne 2 ]
+grep -q ": rows" $WGET_OUTPUT
+if [ $? -ne 0 ]
+then
+	cat $WGET_OUTPUT
+	rm -f $WGET_LOG $WGET_OUTPUT
+	exit 1
+fi
+grep -q ": columns" $WGET_OUTPUT
+if [ $? -ne 0 ]
 then
 	cat $WGET_OUTPUT
 	rm -f $WGET_LOG $WGET_OUTPUT

@@ -81,3 +81,4 @@ cat $WGET_OUTPUT | (
 	rm -f $PUZZLE_ROWS_TMP $PUZZLE_COLS_TMP
 )
 rm -f $WGET_LOG $WGET_OUTPUT
+exit 0

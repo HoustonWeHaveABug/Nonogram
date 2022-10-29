@@ -1,5 +1,6 @@
 5,000 Randomly Generated 30x30 Puzzles
 From Jan Wolter's Survey - https://webpbn.com/survey
+Search for 2 solutions
 
 Environment: Cygwin on Windows 7 Professional
 CPU: Intel i3-4150 3.50 GHz - One core used

@@ -1,5 +1,5 @@
 Sample Set of Black & White and Color Puzzles
-All puzzles published on https://webbpn.com as of October 29th, 2022
+All puzzles published on https://webpbn.com as of October 29th, 2022
 Search for 2 solutions
 
 Environment: Cygwin on Windows 7 Professional

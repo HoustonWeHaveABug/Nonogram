@@ -34,7 +34,6 @@ The structure of the puzzle data is the following:
 
 - Number of columns
 - Number of rows
-- Colored puzzle (0: No, 1: Yes)
 - Column clues (sets in the same column are enclosed by double quotes - sets/set groups are separated by a comma)
 - Row clues (same structure as for the column clues)
 

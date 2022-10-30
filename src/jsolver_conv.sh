@@ -44,7 +44,6 @@ cat $1 | (
 	echo >>$PUZZLE_TMP
 	echo $COLS
 	echo $ROWS
-	echo "0"
 	cat $PUZZLE_TMP
 	rm -f $PUZZLE_TMP
 )

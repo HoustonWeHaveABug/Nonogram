@@ -51,7 +51,7 @@ function nonogram_org_conv() {
 			0 < w-Oa && 0 < z && (O[v][O[v].length] = [ w-Oa, z ]);
 		}
 	}
-	var X = '<p>'+D+'<br/>'+C+'<br/>'+(1 < H.length ? '1':'0')+'<br/>';
+	var X = '<p>'+D+'<br/>'+C+'<br/>';
 	for (w = 0; w < D; w++) {
 		X += w > 0 ? ',':'';
 		X += '"';

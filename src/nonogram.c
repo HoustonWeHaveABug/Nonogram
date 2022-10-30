@@ -92,7 +92,6 @@ void nonogram(int, int, int, clue_t *, option_t *);
 void init_option(option_t *, int, int);
 int reallocate_bounds(set_t *, int);
 int compare_relaxations(const void *, const void *);
-int process_clue(int, int, int *, int *, int *);
 int sweep_clue(set_t *, int, cell_t *);
 int sweep_clue_set(set_t *, int, cell_t *, int *, int *);
 void check_cell_colors(int, cell_t *, int *, int *);
@@ -122,7 +121,7 @@ void free_clue(clue_t *);
 void free_set(set_t *);
 void free_ints(int **);
 
-int width, height, colored, colors_n, *colors, clues_n, grid_size, all_nodes_n, run_nodes_n, failures_n, depth, completed_depth, negative_cache, offset;
+int width, height, colors_n, *colors, clues_n, grid_size, all_nodes_n, run_nodes_n, failures_n, depth, completed_depth, negative_cache, offset;
 long verbose, solutions_max, solutions_n;
 unsigned time_zero;
 set_t **sorted_sets, **locked_sets;
@@ -154,16 +153,13 @@ int main(int argc, char *argv[]) {
 			return EXIT_FAILURE;
 		}
 	}
-	if (scanf("%d%d%d", &width, &height, &colored) != 3 || width < 1 || height < 1) {
+	if (scanf("%d%d", &width, &height) != 2 || width < 1 || height < 1) {
 		fprintf(stderr, "Invalid grid attributes\n");
 		fflush(stderr);
 		return EXIT_FAILURE;
 	}
 	getchar();
 	colors_n = COLOR_POS_BLACK;
-	if (!colored) {
-		colors_n++;
-	}
 	colors = alloc_mem("colors", sizeof(int), colors_n);
 	if (!colors) {
 		return EXIT_FAILURE;
@@ -171,9 +167,6 @@ int main(int argc, char *argv[]) {
 	colors[COLOR_POS_UNKNOWN] = COLOR_UNKNOWN;
 	colors[COLOR_POS_SEVERAL] = COLOR_SEVERAL;
 	colors[COLOR_POS_EMPTY] = COLOR_EMPTY;
-	if (!colored) {
-		colors[COLOR_POS_BLACK] = COLOR_BLACK;
-	}
 	clues = NULL;
 	cells = NULL;
 	sorted_sets = NULL;
@@ -304,28 +297,30 @@ int read_clue(clue_t *clue, int pos, int separator) {
 		return 0;
 	}
 	do {
-		int len, color_pos;
+		int len;
 		if (scanf("%d", &len) != 1 || len < 0) {
 			fprintf(stderr, "Invalid set length\n");
 			fflush(stderr);
 			free(clue->sets);
 			return 0;
 		}
-		if (colored && len > 0) {
-			if (getchar() != SEPARATOR_COLOR) {
-				fprintf(stderr, "Invalid color separator\n");
-				fflush(stderr);
-				free(clue->sets);
-				return 0;
+		c = getchar();
+		if (len > 0) {
+			int color, color_pos;
+			if (c == SEPARATOR_COLOR) {
+				color = getchar();
+				if (!isalnum(color)) {
+					fprintf(stderr, "Invalid set color\n");
+					fflush(stderr);
+					free(clue->sets);
+					return 0;
+				}
+				c = getchar();
 			}
-			c = getchar();
-			if (!isalnum(c)) {
-				fprintf(stderr, "Invalid set color\n");
-				fflush(stderr);
-				free(clue->sets);
-				return 0;
+			else {
+				color = COLOR_BLACK;
 			}
-			for (color_pos = COLOR_POS_BLACK; color_pos < colors_n && colors[color_pos] != c; color_pos++);
+			for (color_pos = COLOR_POS_BLACK; color_pos < colors_n && colors[color_pos] != color; color_pos++);
 			if (color_pos == colors_n) {
 				int *colors_tmp = realloc_mem("colors", colors, sizeof(int), colors_n+1);
 				if (!colors_tmp) {
@@ -333,13 +328,8 @@ int read_clue(clue_t *clue, int pos, int separator) {
 					return 0;
 				}
 				colors = colors_tmp;
-				colors[colors_n++] = c;
+				colors[colors_n++] = color;
 			}
-		}
-		else {
-			color_pos = COLOR_POS_BLACK;
-		}
-		if (len > 0) {
 			set_t *sets = realloc_mem("clue->sets", clue->sets, sizeof(set_t), clue->sets_n+2);
 			if (!sets) {
 				free(clue->sets);
@@ -349,7 +339,6 @@ int read_clue(clue_t *clue, int pos, int separator) {
 			init_set_fields(clue->sets+clue->sets_n, len, color_pos, clue);
 			clue->sets_n++;
 		}
-		c = getchar();
 		if (c != SEPARATOR_SETS && c != DELIMITER_CLUE) {
 			fprintf(stderr, "Invalid set separator\n");
 			fflush(stderr);
@@ -615,13 +604,42 @@ void nonogram(int locked_cells_sum, int locked_clues_sum, int locked_sets_sum, c
 			clue->priority = 0;
 		}
 		for (i = 0; i < sorted_clues_n; i++) {
+			int clue_options_n, j;
 			current_clue = sorted_clues[i];
-			int clue_options_n = process_clue(locked_cells_sum, locked_clues_sum, &changes_n, &locked_cells_n, &locked_clues_n);
+			if (current_clue->pos < width) {
+				offset = width;
+				clue_options_n = sweep_clue(current_clue->sets, 0, cells+current_clue->pos);
+			}
+			else {
+				offset = 1;
+				clue_options_n = sweep_clue(current_clue->sets, 0, cells+(current_clue->pos-width)*width);
+			}
 			if (clue_options_n < clue_options_min) {
 				clue_options_min = clue_options_n;
 				if (clue_options_min == 0) {
 					break;
 				}
+			}
+			if (current_clue->pos < width) {
+				for (cell = current_clue->cells_header->column_next; cell != current_clue->cells_header; cell = cell->column_next) {
+					check_cell_colors(locked_cells_sum, cell, &changes_n, &locked_cells_n);
+				}
+			}
+			else {
+				for (cell = current_clue->cells_header->row_next; cell != current_clue->cells_header; cell = cell->row_next) {
+					check_cell_colors(locked_cells_sum, cell, &changes_n, &locked_cells_n);
+				}
+			}
+			for (j = 0; j < current_clue->sets_n; j++) {
+				update_empty_bound_and_cache(current_clue->sets[j].empty_bounds_min, current_clue->sets[j].color_bounds_max, current_clue->sets[j].empty_cache);
+				update_color_bounds_and_cache(current_clue->sets[j].color_bounds_min, current_clue->sets[j].color_bounds_max, current_clue->sets[j].color_cache);
+			}
+			update_empty_bound_and_cache(current_clue->sets[j].empty_bounds_min, current_clue->sets[j].color_bounds_min, current_clue->sets[j].empty_cache);
+			if (clue_options_n == 1) {
+				current_clue->last->next = current_clue->next;
+				current_clue->next->last = current_clue->last;
+				locked_clues[locked_clues_sum+locked_clues_n] = current_clue;
+				locked_clues_n++;
 			}
 		}
 		if (changes_n > 0 && clue_options_min > 0) {
@@ -807,37 +825,6 @@ int compare_relaxations(const void *a, const void *b) {
 		return clue_a->relaxation-clue_b->relaxation;
 	}
 	return clue_a->pos-clue_b->pos;
-}
-
-int process_clue(int locked_cells_sum, int locked_clues_sum, int *changes_n, int *locked_cells_n, int *locked_clues_n) {
-	int clue_options_n, i;
-	cell_t *cell;
-	if (current_clue->pos < width) {
-		offset = width;
-		clue_options_n = sweep_clue(current_clue->sets, 0, cells+current_clue->pos);
-		for (cell = current_clue->cells_header->column_next; cell != current_clue->cells_header; cell = cell->column_next) {
-			check_cell_colors(locked_cells_sum, cell, changes_n, locked_cells_n);
-		}
-	}
-	else {
-		offset = 1;
-		clue_options_n = sweep_clue(current_clue->sets, 0, cells+(current_clue->pos-width)*width);
-		for (cell = current_clue->cells_header->row_next; cell != current_clue->cells_header; cell = cell->row_next) {
-			check_cell_colors(locked_cells_sum, cell, changes_n, locked_cells_n);
-		}
-	}
-	for (i = 0; i < current_clue->sets_n; i++) {
-		update_empty_bound_and_cache(current_clue->sets[i].empty_bounds_min, current_clue->sets[i].color_bounds_max, current_clue->sets[i].empty_cache);
-		update_color_bounds_and_cache(current_clue->sets[i].color_bounds_min, current_clue->sets[i].color_bounds_max, current_clue->sets[i].color_cache);
-	}
-	update_empty_bound_and_cache(current_clue->sets[i].empty_bounds_min, current_clue->sets[i].color_bounds_min, current_clue->sets[i].empty_cache);
-	if (clue_options_n == 1) {
-		current_clue->last->next = current_clue->next;
-		current_clue->next->last = current_clue->last;
-		locked_clues[locked_clues_sum+*locked_clues_n] = current_clue;
-		*locked_clues_n += 1;
-	}
-	return clue_options_n;
 }
 
 int sweep_clue(set_t *set, int pos, cell_t *start_cell) {

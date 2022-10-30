@@ -8,7 +8,7 @@ ls nonogram_*.txt | (
 	while [ "${FILENAME}" ]
 	do
 		echo "Solving ${FILENAME}..."
-		time timeout $1 /usr/local/nonogram/bin/nonogram 0 $2 <$FILENAME
+		time timeout $1 ../../bin/nonogram 0 $2 <$FILENAME
 		read FILENAME
 	done
 )

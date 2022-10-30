@@ -10,7 +10,6 @@ sed s/"\\$"/$1/g | sed s/"	"/","/g | (
 		FILENAME=nonogram_$PUZZLEID.txt
 		echo $2 >$FILENAME
 		echo $3 >>$FILENAME
-		echo 0 >>$FILENAME
 		read CLUE
 		echo -n "\"${CLUE}\"" >>$FILENAME
 		let I=1

@@ -75,7 +75,6 @@ cat $WGET_OUTPUT | (
 	echo >>$PUZZLE_COLS_TMP
 	echo $COLS
 	echo $ROWS
-	echo "1"
 	cat $PUZZLE_COLS_TMP
 	cat $PUZZLE_ROWS_TMP
 	rm -f $PUZZLE_ROWS_TMP $PUZZLE_COLS_TMP

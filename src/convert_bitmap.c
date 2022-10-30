@@ -49,7 +49,7 @@ int main(int argc, char *argv[]) {
 			return EXIT_FAILURE;
 		}
 	}
-	printf("%ld\n%ld\n0\n", width, height);
+	printf("%ld\n%ld\n", width, height);
 	convert_section(width, height, 1L, width);
 	convert_section(height, width, width, 1L);
 	free(cells);

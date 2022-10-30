@@ -1,10 +1,13 @@
-if [ ! -d 30x30-2 ]
+WGET_LOG=./run_wget.log
+WGET_OUTPUT=./run_wget.tgz
+wget -o $WGET_LOG -O $WGET_OUTPUT https://webpbn.com/survey/rand30.tgz --inet4-only --no-check-certificate
+if [ ! -s $WGET_OUTPUT ]
 then
-	echo "1 - Download tarball https://webpbn.com/survey/rand30.tgz"
-	echo "2 - Extract the content in this directory"
-	echo "3 - Run this script"
+	echo "Could not download tarball"
+	rm -f $WGET_LOG $WGET_OUTPUT
 	exit 1
 fi
+tar xvf $WGET_OUTPUT
 cd 30x30-2
 ls rand* | (
 	read FILENAME
@@ -15,3 +18,6 @@ ls rand* | (
 		read FILENAME
 	done
 )
+cd ..
+rm -rf 30x30-2
+rm -f $WGET_LOG $WGET_OUTPUT

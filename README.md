@@ -5,11 +5,11 @@ Nonogram solver written in C, solution to challenge https://www.reddit.com/r/dai
 The program expects the following arguments on the command line:
 
 - Verbose mode flag (0: Off, 1: On)
-- Maximum number of solutions it will search for. This argument is optional and the default value is the LONG_MAX C constant.
+- Maximum number of solutions it will search for. This argument is optional and the default value is the ULONG_MAX C constant.
 
 It is a backtracker that runs in two phases at each node of the search tree:
 
-Phase 1 - For each clue that have still unknown cells, the program generates all combinations, and then locks all cells that have the same value in all the combinations generated. This phase is iterated until no change can be made in the grid, or no combination is generated for one clue, which is a contradiction and makes the program backtracks.
+Phase 1 - For each clue that has still unknown cells, the program generates all combinations, and then locks all cells that have the same value in all the combinations generated. This phase is iterated until no change can be made in the grid, or no combination is generated for one clue, which is a contradiction and makes the program backtracks.
 
 Phase 2 - If all cells are locked it means a solution was found and it is immediately printed along with the current running time in seconds and size of the search tree (the number of nodes). Otherwise the program selects the "considered as optimal" set using the following criteria in order by running Phase 1 at the next depth for each set:
 

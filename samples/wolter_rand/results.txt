@@ -5,13 +5,13 @@ Search for 2 solutions
 Environment: Cygwin on Windows 7 Professional
 CPU: Intel i3-4150 3.50 GHz - One core used
 
-0 to 0.09 sec		3503
-0.10 to 0.19 sec	761
-0.20 to 0.49 sec	476
-0.50 to 0.99 sec	121
-1.00 to 3.99 sec	88
-4.00 to 9.99 sec	21
-10.00 to 29.99 sec	13
-30.00 to 59.99 sec	5
+0 to 0.09 sec		3609
+0.10 to 0.19 sec	696
+0.20 to 0.49 sec	456
+0.50 to 0.99 sec	106
+1.00 to 3.99 sec	83
+4.00 to 9.99 sec	22
+10.00 to 29.99 sec	12
+30.00 to 59.99 sec	4
 1 min to 2 min		2
 2 min or more		10

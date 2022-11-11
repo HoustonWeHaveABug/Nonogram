@@ -1,4 +1,4 @@
-NONOGRAM_PG_C_FLAGS=-c -pg -O2 -Wall -Wextra -Waggregate-return -Wcast-align -Wcast-qual -Wconversion -Wformat=2 -Winline -Wlong-long -Wmissing-prototypes -Wmissing-declarations -Wnested-externs -Wno-import -Wpointer-arith -Wredundant-decls -Wshadow -Wstrict-prototypes -Wwrite-strings
+NONOGRAM_PG_C_FLAGS=-c -pg -Wall -Wextra -Waggregate-return -Wcast-align -Wcast-qual -Wconversion -Wformat=2 -Winline -Wlong-long -Wmissing-prototypes -Wmissing-declarations -Wnested-externs -Wno-import -Wpointer-arith -Wredundant-decls -Wshadow -Wstrict-prototypes -Wwrite-strings
 
 ../bin/nonogram_pg: ../obj/nonogram_pg.o
 	gcc -pg -o ../bin/nonogram_pg ../obj/nonogram_pg.o
